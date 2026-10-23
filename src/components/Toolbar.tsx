@@ -11,15 +11,16 @@ import {
   ListOrdered,
   Undo2,
   Redo2,
-  FolderPlus,
+  PaintBucket,
   Highlighter,
   ChevronDown,
 } from "lucide-react";
 interface Props {
   editor: Editor | null;
-  onFolder: () => void;
+  background: string;
+  onBackground: (color: string) => void;
 }
-export function Toolbar({ editor, onFolder }: Props) {
+export function Toolbar({ editor, background, onBackground }: Props) {
   const fontColor = useRef<HTMLInputElement>(null);
   const highlightColor = useRef<HTMLInputElement>(null);
   const state = useEditorState({
@@ -36,7 +37,7 @@ export function Toolbar({ editor, onFolder }: Props) {
               "left",
             bullet: e.isActive("bulletList"),
             ordered: e.isActive("orderedList"),
-            color: e.getAttributes("textStyle").color || "#323632",
+            color: e.getAttributes("textStyle").color || "#000000",
             highlight:
               e.getAttributes("textStyle").backgroundColor || "#fff0ad",
             font: e.getAttributes("textStyle").fontFamily || "sans-serif",
@@ -140,7 +141,7 @@ export function Toolbar({ editor, onFolder }: Props) {
           value={
             /^#[a-f0-9]{6}$/i.test(state?.color || "")
               ? state!.color
-              : "#323632"
+              : "#000000"
           }
           onChange={(event) =>
             run((e) => e.chain().focus().setColor(event.target.value).run())
@@ -233,15 +234,15 @@ export function Toolbar({ editor, onFolder }: Props) {
         <Redo2 size={17} />
       </button>
       <span className="toolbar-divider" />
-      <button
-        className="folder-toolbar"
-        disabled={!editor}
-        title="선택한 위치에 폴더 버튼 추가"
-        onClick={onFolder}
-      >
-        <FolderPlus size={16} />
-        <span>폴더 연결</span>
-      </button>
+      <label className="tool-button color-tool" title="메모 배경색">
+        <PaintBucket size={16} />
+        <input
+          type="color"
+          aria-label="메모 배경색"
+          value={background}
+          onChange={(event) => onBackground(event.target.value)}
+        />
+      </label>
     </div>
   );
 }

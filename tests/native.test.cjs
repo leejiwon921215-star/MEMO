@@ -63,18 +63,94 @@ test(
         await app.evaluate(({ app }) => app.getPath("userData")),
         userData,
       );
+      assert.deepEqual(
+        await app.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows()[0].getMinimumSize(),
+        ),
+        [320, 360],
+      );
+      assert.equal(
+        (await page.evaluate(() => window.memoDesktop.getWindowSettings()))
+          .width,
+        520,
+      );
+      assert.deepEqual(
+        await page.evaluate(() =>
+          window.memoDesktop.copyText("첫 줄\n다음 줄"),
+        ),
+        { ok: true },
+      );
+      assert.equal(
+        await app.evaluate(({ clipboard }) => clipboard.readText()),
+        "첫 줄\n다음 줄",
+      );
+      assert.equal(
+        (await page.evaluate(() => window.memoDesktop.resizeWindow(200, 500)))
+          .ok,
+        false,
+      );
+      assert.deepEqual(
+        await page.evaluate(() => window.memoDesktop.resizeWindow(360, 500)),
+        { ok: true },
+      );
+      assert.equal(
+        (await page.evaluate(() => window.memoDesktop.getWindowSettings()))
+          .width,
+        360,
+      );
+      assert.deepEqual(
+        await page.evaluate(() => window.memoDesktop.setSizeLocked(true)),
+        { ok: true },
+      );
+      assert.equal(
+        await app.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows()[0].isResizable(),
+        ),
+        false,
+      );
+      assert.equal(
+        (await page.evaluate(() => window.memoDesktop.resizeWindow(400, 500)))
+          .ok,
+        false,
+      );
+      await page.evaluate(() => window.memoDesktop.setAlwaysOnTop(true));
+      await page.evaluate(() => window.memoDesktop.setAlwaysOnTop(false));
+      const preference = JSON.parse(
+        await fs.readFile(path.join(userData, "preferences.json"), "utf8"),
+      );
+      assert.equal(preference.sizeLocked, true);
+      assert.equal(preference.alwaysOnTop, false);
+
       await page
         .getByRole("textbox", { name: "메모 제목", exact: true })
         .fill("데스크톱에 저장한 기록");
-      await page
-        .getByRole("status")
-        .filter({ hasText: "모든 변경사항 저장됨" })
-        .waitFor();
+      await page.getByRole("status").filter({ hasText: "저장됨" }).waitFor();
       assert.equal(
         JSON.parse(await fs.readFile(path.join(userData, "memos.json"), "utf8"))
           .notes[0].title,
         "데스크톱에 저장한 기록",
       );
+      await page
+        .getByRole("button", { name: "복사 버튼", exact: true })
+        .click();
+      await page.getByLabel("버튼 이름", { exact: true }).fill("인사 복사");
+      await page
+        .getByRole("radio", { name: "직접 입력한 문구", exact: true })
+        .check();
+      await page
+        .getByRole("textbox", { name: "복사할 문구", exact: true })
+        .fill("감사합니다.\n좋은 하루 보내세요.");
+      await page
+        .getByRole("button", { name: "버튼 추가", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "인사 복사", exact: true })
+        .click();
+      assert.equal(
+        await app.evaluate(({ clipboard }) => clipboard.readText()),
+        "감사합니다.\n좋은 하루 보내세요.",
+      );
+      await page.getByRole("status").filter({ hasText: "저장됨" }).waitFor();
       await app.evaluate(({ shell, dialog }, selected) => {
         globalThis.__openedFolder = null;
         shell.openPath = async (folder) => {
@@ -123,6 +199,31 @@ test(
       await restoredPage
         .getByRole("textbox", { name: "메모 제목", exact: true })
         .waitFor();
+      await restoredPage
+        .getByRole("button", { name: "인사 복사", exact: true })
+        .waitFor();
+      await restoredPage
+        .getByRole("button", { name: "인사 복사", exact: true })
+        .click();
+      assert.equal(
+        await app.evaluate(({ clipboard }) => clipboard.readText()),
+        "감사합니다.\n좋은 하루 보내세요.",
+      );
+      const restoredSettings = await restoredPage.evaluate(() =>
+        window.memoDesktop.getWindowSettings(),
+      );
+      assert.equal(restoredSettings.sizeLocked, true);
+      assert.equal(restoredSettings.width, 360);
+      assert.equal(restoredSettings.height, 500);
+      await restoredPage.evaluate(() =>
+        window.memoDesktop.setSizeLocked(false),
+      );
+      assert.equal(
+        await app.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows()[0].isResizable(),
+        ),
+        true,
+      );
       assert.equal(
         await restoredPage
           .getByRole("textbox", { name: "메모 제목", exact: true })
@@ -171,7 +272,7 @@ test(
       await page.waitForFunction(
         () =>
           document
-            .querySelector('[role="switch"]')
+            .querySelector('[role="switch"][aria-label="항상 위에 표시"]')
             .getAttribute("aria-checked") === "true",
       );
       assert.equal(
@@ -180,11 +281,11 @@ test(
         ),
         true,
       );
-      assert.deepEqual(
+      assert.equal(
         JSON.parse(
           await fs.readFile(path.join(dir, "preferences.json"), "utf8"),
-        ),
-        { alwaysOnTop: true },
+        ).alwaysOnTop,
+        true,
       );
       await app.close();
       app = null;
@@ -193,7 +294,7 @@ test(
       await restored.waitForFunction(
         () =>
           document
-            .querySelector('[role="switch"]')
+            .querySelector('[role="switch"][aria-label="항상 위에 표시"]')
             ?.getAttribute("aria-checked") === "true",
       );
       assert.equal(
@@ -208,7 +309,7 @@ test(
       await restored.waitForFunction(
         () =>
           document
-            .querySelector('[role="switch"]')
+            .querySelector('[role="switch"][aria-label="항상 위에 표시"]')
             .getAttribute("aria-checked") === "false",
       );
       assert.equal(

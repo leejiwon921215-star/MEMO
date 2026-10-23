@@ -1,6 +1,6 @@
 {
   "name": "memo-studio",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "서식과 섹션, 폴더 바로가기가 있는 나만의 메모장",
   "main": "electron/main.cjs",
@@ -14,7 +14,8 @@
     "package:mac": "npm run build && electron-builder --mac dmg",
     "package:linux": "npm run build && electron-builder --linux AppImage",
     "test:native": "npm run build && node --test tests/native.test.cjs",
-    "package:win:installer": "npm run build && electron-builder --win nsis"
+    "package:win:installer": "npm run build && electron-builder --win nsis",
+    "package:portable": "npm run build && electron-builder --win --x64 --dir && node scripts/package-portable.cjs"
   },
   "dependencies": {
     "@tiptap/react": "^3.20.0",
