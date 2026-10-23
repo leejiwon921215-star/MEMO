@@ -1,0 +1,65 @@
+{
+  "name": "memo-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "서식과 섹션, 폴더 바로가기가 있는 나만의 메모장",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "desktop": "npm run build && electron .",
+    "test": "playwright test",
+    "package:win": "npm run build && electron-builder --win zip",
+    "package:mac": "npm run build && electron-builder --mac dmg",
+    "package:linux": "npm run build && electron-builder --linux AppImage",
+    "test:native": "npm run build && node --test tests/native.test.cjs",
+    "package:win:installer": "npm run build && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "@tiptap/react": "^3.20.0",
+    "@tiptap/starter-kit": "^3.20.0",
+    "@tiptap/extension-text-style": "^3.20.0",
+    "@tiptap/extension-text-align": "^3.20.0",
+    "@tiptap/core": "^3.20.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "^40.0.0",
+    "electron-builder": "^26.0.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.0.0"
+  },
+  "build": {
+    "appId": "com.memostudio.app",
+    "productName": "MEMO",
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "zip",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+  },
+  "productName": "MEMO",
+  "engines": {
+    "node": ">=24"
+  }
+}

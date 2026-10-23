@@ -1,0 +1,54 @@
+name: Build Windows download
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - run: npx playwright install chromium
+      - run: npm test -- --workers=2
+      - run: node --test tests/native.test.cjs
+      - run: npm run package:win -- --x64
+      - name: Publish Windows ZIP
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          $asset = Get-Item "release/MEMO-*-win-x64.zip"
+          if (@($asset).Count -ne 1) { throw "Expected one Windows ZIP" }
+          $hash = (Get-FileHash $asset.FullName -Algorithm SHA256).Hash.ToLower()
+          "$hash  $($asset.Name)" | Set-Content -Encoding utf8 "release/SHA256SUMS.txt"
+          @"
+          Windows 10/11 x64용 MEMO입니다.
+
+          ZIP 파일을 내려받아 압축을 전부 풀고 MEMO.exe를 실행하세요.
+          도트 픽셀 디자인, 글 서식/색상, 섹션, 삭제 확인, 폴더 바로가기,
+          항상 위에 표시, 자동 저장과 백업을 지원합니다.
+
+          코드 서명이 없는 개발 빌드입니다.
+          "@ | Set-Content -Encoding utf8 "release/RELEASE_NOTES.md"
+          gh release create "$env:RELEASE_TAG" "$($asset.FullName)" "release/SHA256SUMS.txt" --verify-tag --title "MEMO $env:RELEASE_TAG - Windows" --notes-file "release/RELEASE_NOTES.md"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
