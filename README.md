@@ -6,6 +6,12 @@
 
 ## Windows에서 사용하기
 
+**[Windows 실행본 다운로드 (약 91MB)](https://github.com/leejiwon921215-star/MEMO/raw/refs/heads/downloads/MEMO-Windows.exe)**
+
+`MEMO-Windows.exe`는 공식 LZMA SDK 25.01의 공개 도메인 압축 해제 모듈과 앱을 한 파일에 묶은 실행본입니다. 실행 시 임시 폴더에 앱을 풀어 시작하고, 종료 후 임시 파일을 정리합니다. 메모는 `%APPDATA%\MEMO`에 별도로 유지됩니다. 실제 Windows에서 최종 실행 확인은 필요합니다.
+
+직접 빌드한 ZIP 파일을 사용하는 경우:
+
 1. `release/MEMO-1.0.0-win-x64.zip`의 압축을 폴더에 **전부** 풀어주세요.
 2. 압축을 푼 폴더 안의 `MEMO.exe`를 실행하세요. 별도 Node.js 설치는 필요 없습니다.
 3. 실행 파일만 다른 곳으로 옮기면 작동하지 않습니다. 바로가기를 만들어 사용하세요.
