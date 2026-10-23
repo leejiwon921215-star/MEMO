@@ -1,1 +1,2 @@
-e823bcb03b621dc80dbd2e38edd5dc139ab454067356f3525545ee08c27e2009  MEMO-Windows.exe
+e728ba81bf4143f1a4fa4f6b18abd788b5cbca7adb15efe75d03522361ac7b6a  MEMO-Windows-1.1.0.exe
+e728ba81bf4143f1a4fa4f6b18abd788b5cbca7adb15efe75d03522361ac7b6a  MEMO-Windows.exe
