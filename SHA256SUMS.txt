@@ -1,3 +1,5 @@
 e728ba81bf4143f1a4fa4f6b18abd788b5cbca7adb15efe75d03522361ac7b6a  MEMO-Windows-1.1.0.exe
-e728ba81bf4143f1a4fa4f6b18abd788b5cbca7adb15efe75d03522361ac7b6a  MEMO-Windows.exe
+d87fa4a431c414fa7716ec179b62c5ee39d343c490f649973785bd4d180dafb4  MEMO-Windows.exe
 2bc83545decce8a0509c8612a30678b93c2ffe9f0398e37ccd8b3a4f5ee3e1da  MEMO-Windows-1.1.0.zip
+d87fa4a431c414fa7716ec179b62c5ee39d343c490f649973785bd4d180dafb4  MEMO-Windows-1.2.0.exe
+0ec90efaa866d67c3786f4fa95cbcd03f15ce02639c963b409b37b3f7cff6a61  MEMO-Windows-1.2.0.zip

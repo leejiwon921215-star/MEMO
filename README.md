@@ -1,3 +1,23 @@
+# MEMO 1.2.0 — Windows
+
+**[Windows ZIP 다운로드](https://github.com/leejiwon921215-star/MEMO/raw/refs/heads/downloads/MEMO-Windows-1.2.0.zip)**
+
+[실행 파일만 다운로드](https://github.com/leejiwon921215-star/MEMO/raw/refs/heads/downloads/MEMO-Windows-1.2.0.exe)
+
+ZIP을 모두 압축 해제하고 기존 앱을 완전히 종료한 뒤 안의 MEMO-Windows-1.2.0.exe를 실행하세요. 기존 메모와 버튼, 창 설정은 유지됩니다.
+
+- 상단 ⋯ 메뉴 → 상단 색상 설정: 직접 고른 색을 저장하고 다시 실행해도 유지합니다.
+- 폴더·복사 바로가기는 창 폭에 맞춰 아래로 정렬되며 긴 이름도 여러 줄로 표시합니다.
+- 본문은 별도 색상으로 유지됩니다. 색상 설정은 백업에도 포함됩니다.
+
+브라우저 검사 17개, 실제 Electron 저장·복원·클립보드 등 검사 2개가 통과했습니다. 화면이 필요한 창 겹침 검사는 Linux 클라우드에서 건너뛰었습니다. 코드 서명이 없는 Windows 10/11 x64 개발 빌드입니다.
+
+Source: https://github.com/leejiwon921215-star/MEMO/tree/v1.2.0
+
+---
+
+## 이전 배포 안내
+
 # MEMO 1.1.0 — Windows
 
 [Windows 실행본 다운로드](https://github.com/leejiwon921215-star/MEMO/raw/refs/heads/downloads/MEMO-Windows-1.1.0.exe)
