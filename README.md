@@ -16,3 +16,9 @@ Windows 10/11 x64용 서명 없는 개발 빌드입니다. 실제 Windows의 탐
 
 Source: https://github.com/leejiwon921215-star/MEMO/tree/v1.1.0
 SDK: https://github.com/ip7z/7zip/releases/tag/25.01
+
+## ZIP 다운로드
+
+[Windows ZIP 다운로드](https://github.com/leejiwon921215-star/MEMO/raw/refs/heads/downloads/MEMO-Windows-1.1.0.zip)
+
+실행 파일 다운로드에 어려움이 있으면 ZIP을 받을 수 있습니다. 모두 압축 풀기를 선택한 뒤 안의 MEMO-Windows-1.1.0.exe를 실행하세요. 기존과 동일한 실행 파일이며, 코드 서명이 없어 Windows 확인창은 계속 나타날 수 있습니다.
