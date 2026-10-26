@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Highlighter, Star } from "lucide-react";
 import { Modal } from "./Modal";
 import {
@@ -27,10 +27,24 @@ export function ColorPicker({
     colorHex(value, kind === "text" ? "#000000" : "#fff0ad"),
   );
   const name = kind === "text" ? "글씨색" : "강조색";
-  const select = (color: string) => {
+  const colorInput = useRef<HTMLInputElement>(null);
+  const select = (color: string, committed = true) => {
     setPicked(color);
     onSelect(color);
+    if (kind === "highlight" && committed) setOpen(false);
   };
+  const selectRef = useRef(select);
+  selectRef.current = select;
+  useEffect(() => {
+    if (!open) return;
+    const input = colorInput.current;
+    if (!input) return;
+    // Native color pickers emit input previews, then a change on commitment.
+    // Keep previews live without closing the OS picker during a drag.
+    const commit = () => selectRef.current(input.value, true);
+    input.addEventListener("change", commit);
+    return () => input.removeEventListener("change", commit);
+  }, [open]);
   const base =
     kind === "text"
       ? ["#000000", "#d93025", "#174ea6", "#188038", "#8430ce", "#ffffff"]
@@ -69,10 +83,11 @@ export function ColorPicker({
             <label>
               <span>{name}</span>
               <input
+                ref={colorInput}
                 type="color"
                 aria-label={name}
                 value={picked}
-                onChange={(event) => select(event.target.value)}
+                onChange={(event) => select(event.target.value, false)}
               />
             </label>
             <span>{picked.toUpperCase()}</span>
@@ -156,11 +171,17 @@ export function ColorPicker({
               <span className="field-hint">선택한 색이 여기에 표시됩니다.</span>
             )}
           </div>
-          <div className="modal-actions">
-            <button className="primary-button" onClick={() => setOpen(false)}>
-              완료
-            </button>
-          </div>
+          {kind === "text" ? (
+            <div className="modal-actions">
+              <button className="primary-button" onClick={() => setOpen(false)}>
+                완료
+              </button>
+            </div>
+          ) : (
+            <p className="field-hint">
+              색을 선택하면 바로 적용되고 창이 닫힙니다.
+            </p>
+          )}
         </Modal>
       )}
     </>

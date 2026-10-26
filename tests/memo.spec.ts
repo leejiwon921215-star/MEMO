@@ -72,7 +72,7 @@ async function color(page: Page, name: string, value: string) {
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
     }, value);
-  if (palette)
+  if (name === "글씨색")
     await page.getByRole("button", { name: "완료", exact: true }).click();
 }
 async function mockClipboard(page: Page) {
@@ -886,7 +886,7 @@ test("text and highlight colors have separate recent lists and favorite colors",
   await page
     .getByRole("button", { name: "현재 강조색 즐겨찾기", exact: true })
     .click();
-  await page.getByRole("button", { name: "완료", exact: true }).click();
+  await page.getByRole("button", { name: "닫기", exact: true }).click();
   await page.reload();
   await page.getByRole("button", { name: "글씨색 선택", exact: true }).click();
   await expect(
@@ -1000,4 +1000,51 @@ test("application controls use the default Gothic font and keep compact layout",
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(320);
+});
+
+test("highlight colors apply and close immediately without a Done button", async ({
+  page,
+}) => {
+  await open(page);
+  await body(page).fill("즉시 형광색 적용");
+  await body(page).click();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.getByRole("button", { name: "강조색 선택", exact: true }).click();
+  await expect(
+    page
+      .getByRole("dialog", { name: "형광색" })
+      .getByRole("button", { name: "완료", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "강조색 기본 #ffff00", exact: true })
+    .click();
+  await expect(page.getByRole("dialog", { name: "형광색" })).toHaveCount(0);
+  await expect(body(page).locator("span").first()).toHaveCSS(
+    "background-color",
+    "rgb(255, 255, 0)",
+  );
+  await page.getByRole("button", { name: "강조색 선택", exact: true }).click();
+  await page
+    .getByRole("button", { name: "현재 강조색 즐겨찾기", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "강조색 최근 #ffff00", exact: true })
+    .click();
+  await expect(page.getByRole("dialog", { name: "형광색" })).toHaveCount(0);
+  await color(page, "강조색", "#cceeff");
+  await expect(page.getByRole("dialog", { name: "형광색" })).toHaveCount(0);
+  await expect(body(page).locator("span").first()).toHaveCSS(
+    "background-color",
+    "rgb(204, 238, 255)",
+  );
+  await page.getByRole("button", { name: "강조색 선택", exact: true }).click();
+  await page
+    .getByRole("button", { name: "강조색 즐겨찾기 #ffff00", exact: true })
+    .click();
+  await expect(page.getByRole("dialog", { name: "형광색" })).toHaveCount(0);
+  await page.reload();
+  await expect(body(page).locator("span").first()).toHaveCSS(
+    "background-color",
+    "rgb(255, 255, 0)",
+  );
 });
