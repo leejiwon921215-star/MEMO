@@ -1,3 +1,27 @@
+# MEMO 1.4.0 — Windows
+
+**[Windows ZIP 다운로드](https://github.com/leejiwon921215-star/MEMO/raw/refs/heads/downloads/MEMO-Windows-1.4.0.zip)**
+
+[실행 파일만 다운로드](https://github.com/leejiwon921215-star/MEMO/raw/refs/heads/downloads/MEMO-Windows-1.4.0.exe)
+
+기존 앱을 완전히 종료하고 ZIP을 모두 압축 해제한 뒤 MEMO-Windows-1.4.0.exe를 실행하세요. 기존 메모와 설정은 유지됩니다.
+
+- 섹션 높이가 내용에 맞게 자동으로 늘고 줄어듦
+- 상단·팝업·폴더 및 복사 버튼 기본값을 검정 글씨·검정 테두리·회색 배경으로 통일
+- 버튼·글씨·형광색·상단·본문·팝업의 색 즐겨찾기와 최근 사용 색을 공통으로 연결
+- 기존 글씨색·형광색 즐겨찾기를 합쳐서 보존 (즐겨찾기 64개, 최근 색 12개)
+- 바로가기 관리 → 버튼 색상 일괄 변경: 상단과 모든 메모 본문의 버튼을 체크 후 적용, 전체 선택 및 기본색 복원
+- 상단 색상 설정 → 창·팝업·선 색상 설정에서 배경·글씨·테두리 사용자 지정 및 기본색 복원
+- 기존 메모, 폴더 경로, 복사 동작, 줄 간격과 사용자 지정 색 보존
+
+브라우저 기능 검사 33개와 데이터 검증·실제 Electron 저장·복원·클립보드 등 검사 3개가 통과했습니다. 화면이 필요한 창 겹침 검사는 Linux 환경에서 건너뛰었으며 실제 Windows 실행은 최종 확인이 필요합니다. 앱은 코드 서명이 없는 개발 빌드입니다.
+
+Source: https://github.com/leejiwon921215-star/MEMO/tree/v1.4.0
+
+---
+
+## 이전 배포 안내
+
 # MEMO 1.3.2 — Windows
 
 **[Windows ZIP 다운로드](https://github.com/leejiwon921215-star/MEMO/raw/refs/heads/downloads/MEMO-Windows-1.3.2.zip)**
