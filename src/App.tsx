@@ -1,3 +1,5 @@
+import { ColorsContext, ColorFields } from "./components/ColorFields";
+import { colorButtons, applyButtonColors } from "./lib/buttonColors";
 import { useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import {
@@ -32,8 +34,14 @@ import {
 import { Modal } from "./components/Modal";
 import { SectionEditor } from "./components/SectionEditor";
 import { Toolbar } from "./components/Toolbar";
-import { emptyPalettes, shortcutStyle, type ColorKind } from "./lib/colors";
-import { DEFAULT_HEADER_COLOR, HEADER_COLORS, headerTheme } from "./lib/theme";
+import { emptyPalettes, sharedPalette, shortcutStyle } from "./lib/colors";
+import {
+  DEFAULT_HEADER_COLOR,
+  HEADER_COLORS,
+  headerTheme,
+  uiTheme,
+  type Appearance,
+} from "./lib/theme";
 import {
   id,
   initialData,
@@ -85,7 +93,7 @@ export default function App() {
   const [copyNoteId, setCopyNoteId] = useState("");
   const [copyText, setCopyText] = useState("");
   const [actionError, setActionError] = useState("");
-  const [buttonColor, setButtonColor] = useState("#e2eecf");
+  const [buttonColor, setButtonColor] = useState("#f5f5f5");
   const [customButtonColor, setCustomButtonColor] = useState(false);
   const [notice, setNotice] = useState("");
   const [settings, setSettings] = useState<WindowSettings>({
@@ -105,50 +113,65 @@ export default function App() {
   const native = !!window.memoDesktop;
   const note = data?.notes.find((n) => n.id === data.selectedId) || null;
   const shortcuts = data?.shortcuts || [];
-  const palettes = data?.colorPalettes || emptyPalettes();
+  const palette = sharedPalette(data?.colorPalettes || emptyPalettes());
+  const theme = uiTheme(data?.appearance);
+  const [checkedButtons, setCheckedButtons] = useState<string[]>([]);
+  const [batchColor, setBatchColor] = useState("#f5f5f5");
+  const buttons = panel === "shortcuts" && data ? colorButtons(data) : [];
+  const selectedButtons = buttons.filter((b) => checkedButtons.includes(b.key));
+  function toggleButton(key: string) {
+    setCheckedButtons((current) =>
+      current.includes(key)
+        ? current.filter((k) => k !== key)
+        : [...current, key],
+    );
+  }
+  function applyBatchColor(reset = false) {
+    const keys = selectedButtons.map((b) => b.key);
+    if (!keys.length) return;
+    setData(
+      (current) =>
+        current &&
+        applyButtonColors(current, keys, reset ? undefined : batchColor),
+    );
+    if (!reset) rememberColor(batchColor);
+    setNotice(`${keys.length}개 버튼의 색을 변경했습니다.`);
+  }
   const headerColor = data?.appearance?.headerColor || DEFAULT_HEADER_COLOR;
 
-  function rememberColor(kind: ColorKind, color: string) {
+  function rememberColor(color: string) {
     setData((current) => {
       if (!current) return current;
-      const all = current.colorPalettes || emptyPalettes();
-      return {
-        ...current,
-        colorPalettes: {
-          ...all,
-          [kind]: {
-            ...all[kind],
-            recent: [
-              color,
-              ...all[kind].recent.filter((c) => c !== color),
-            ].slice(0, 12),
-          },
-        },
+      const shared = sharedPalette(current.colorPalettes || emptyPalettes());
+      const next = {
+        ...shared,
+        recent: [
+          color.toLowerCase(),
+          ...shared.recent.filter((c) => c !== color.toLowerCase()),
+        ].slice(0, 12),
       };
+      return { ...current, colorPalettes: { text: next, highlight: next } };
     });
   }
-  function favoriteColor(kind: ColorKind, color: string) {
-    const favorites = palettes[kind].favorites;
-    if (!favorites.includes(color) && favorites.length >= 32) {
-      setNotice("색상 즐겨찾기는 종류별로 32개까지 저장할 수 있습니다.");
+  function favoriteColor(color: string) {
+    const normalized = color.toLowerCase();
+    if (
+      !palette.favorites.includes(normalized) &&
+      palette.favorites.length >= 64
+    ) {
+      setNotice("색상 즐겨찾기는 64개까지 저장할 수 있습니다.");
       return;
     }
     setData((current) => {
       if (!current) return current;
-      const all = current.colorPalettes || emptyPalettes();
-      const list = all[kind].favorites;
-      return {
-        ...current,
-        colorPalettes: {
-          ...all,
-          [kind]: {
-            ...all[kind],
-            favorites: list.includes(color)
-              ? list.filter((c) => c !== color)
-              : [...list, color],
-          },
-        },
+      const shared = sharedPalette(current.colorPalettes || emptyPalettes());
+      const next = {
+        ...shared,
+        favorites: shared.favorites.includes(normalized)
+          ? shared.favorites.filter((c) => c !== normalized)
+          : [...shared.favorites, normalized],
       };
+      return { ...current, colorPalettes: { text: next, highlight: next } };
     });
   }
   function reorderNotes(source: string, target: string) {
@@ -174,11 +197,21 @@ export default function App() {
       return { sections };
     });
   }
-  function setHeaderColor(color: string) {
+  function setAppearance(patch: Partial<Appearance>) {
     setData(
       (current) =>
-        current && { ...current, appearance: { headerColor: color } },
+        current && {
+          ...current,
+          appearance: {
+            headerColor: DEFAULT_HEADER_COLOR,
+            ...current.appearance,
+            ...patch,
+          },
+        },
     );
+  }
+  function setHeaderColor(color: string) {
+    setAppearance({ headerColor: color });
   }
 
   useEffect(() => {
@@ -410,9 +443,7 @@ export default function App() {
   ) {
     setPanel(null);
     setActionDialog({ kind, editingId: shortcut?.id, inline });
-    setButtonColor(
-      shortcut?.background || (kind === "folder" ? "#e2eecf" : "#e8edf6"),
-    );
+    setButtonColor(shortcut?.background || "#f5f5f5");
     setCustomButtonColor(!!shortcut?.background);
     setLabel(shortcut?.label || "");
     setPath(shortcut?.type === "folder" ? shortcut.path : "");
@@ -678,830 +709,924 @@ export default function App() {
   );
   if (!data) return <div className="loading">불러오는 중…</div>;
   return (
-    <main className="memo-app">
-      <header className="pinned-header" style={headerTheme(headerColor)}>
-        <div className="note-bar">
-          <button
-            className="chrome-button"
-            aria-label="메모 목록"
-            title="메모 목록"
-            onClick={() => setPanel("notes")}
-          >
-            <List size={17} />
-          </button>
-          <input
-            ref={titleInput}
-            className="compact-title"
-            aria-label="메모 제목"
-            placeholder="메모 제목"
-            disabled={!note}
-            value={note?.title || ""}
-            onChange={(event) =>
-              note && updateNote(note.id, { title: event.target.value })
-            }
-          />
-          <button
-            className="chrome-button"
-            aria-label="새 메모"
-            title="새 메모"
-            onClick={addNote}
-          >
-            <Plus size={17} />
-          </button>
-          <button
-            className="chrome-button"
-            aria-label="메모 메뉴"
-            title="메모 메뉴"
-            onClick={() => setPanel("menu")}
-          >
-            <MoreHorizontal size={18} />
-          </button>
-        </div>
-        <div className="quick-tools" aria-label="고정 기능">
-          <button className="retro-button" onClick={() => openAction("folder")}>
-            <FolderPlus size={15} />
-            폴더 추가
-          </button>
-          <button className="retro-button" onClick={() => openAction("copy")}>
-            <ClipboardPlus size={15} />
-            복사 버튼
-          </button>
-          <div className="toolbar-spacer" />
-          <button
-            className={`chrome-button ${settings.alwaysOnTop ? "pressed" : ""}`}
-            role="switch"
-            aria-label="항상 위에 표시"
-            aria-checked={settings.alwaysOnTop}
-            title="항상 위에 표시"
-            disabled={windowBusy}
-            onClick={() => void windowAction("top")}
-          >
-            <Pin size={15} />
-          </button>
-          <button
-            className={`chrome-button ${settings.sizeLocked ? "pressed" : ""}`}
-            role="switch"
-            aria-label="창 크기 고정"
-            aria-checked={settings.sizeLocked}
-            title={
-              settings.sizeLocked ? "창 크기 고정 해제" : "현재 창 크기 고정"
-            }
-            disabled={windowBusy}
-            onClick={() => void windowAction("lock")}
-          >
-            {settings.sizeLocked ? (
-              <LockKeyhole size={15} />
-            ) : (
-              <UnlockKeyhole size={15} />
-            )}
-          </button>
-          <button
-            className="chrome-button"
-            aria-label="창 크기 설정"
-            title="창 크기 설정"
-            onClick={() => void openWindowSettings()}
-          >
-            <Settings2 size={15} />
-          </button>
-        </div>
-        {shortcuts.length > 0 && (
-          <div className="shortcut-bar" aria-label="고정 바로가기">
-            <div className="shortcut-scroll">
-              {shortcuts.map((shortcut) => (
-                <button
-                  key={shortcut.id}
-                  className={`shortcut-button ${shortcut.type}`}
-                  style={shortcutStyle(shortcut.background)}
-                  title={
-                    shortcut.type === "folder"
-                      ? shortcut.path
-                      : `${shortcut.label} 복사`
-                  }
-                  onClick={() => void runAction(shortcut)}
-                >
-                  {shortcut.type === "folder" ? (
-                    <Folder size={14} />
-                  ) : (
-                    <ClipboardCopy size={14} />
-                  )}
-                  <span>{shortcut.label}</span>
-                </button>
-              ))}
-            </div>
+    <ColorsContext.Provider
+      value={{
+        palette,
+        remember: rememberColor,
+        favorite: favoriteColor,
+        theme,
+      }}
+    >
+      <main className="memo-app" style={theme}>
+        <header className="pinned-header" style={headerTheme(headerColor)}>
+          <div className="note-bar">
             <button
               className="chrome-button"
-              aria-label="바로가기 관리"
-              title="바로가기 관리"
-              onClick={() => setPanel("shortcuts")}
+              aria-label="메모 목록"
+              title="메모 목록"
+              onClick={() => setPanel("notes")}
             >
-              <Pencil size={13} />
+              <List size={17} />
             </button>
-          </div>
-        )}
-        {note && (
-          <Toolbar
-            editor={editor && !editor.isDestroyed ? editor : null}
-            background={note.background}
-            onBackground={(background) => updateNote(note.id, { background })}
-            palettes={palettes}
-            onRememberColor={rememberColor}
-            onFavoriteColor={favoriteColor}
-          />
-        )}
-      </header>
-      {saveError && (
-        <div className="storage-warning" role="alert">
-          {saveError}
-          <button onClick={exportBackup}>백업 저장</button>
-        </div>
-      )}
-      {note ? (
-        <div
-          className="paper-scroll"
-          style={{ backgroundColor: note.background }}
-        >
-          <div className="paper-content" key={note.id}>
-            {note.sections.map((section, index) => (
-              <SectionEditor
-                key={section.id}
-                section={section}
-                noteId={note.id}
-                total={note.sections.length}
-                onReorder={(source) =>
-                  reorderSections(note.id, source, section.id)
-                }
-                onMove={(offset) => {
-                  const target = note.sections[index + offset];
-                  if (target) reorderSections(note.id, section.id, target.id);
-                }}
-                index={index}
-                active={activeSection === section.id}
-                onChange={(patch) => updateSection(note.id, section.id, patch)}
-                onFocus={(focused, sectionId) => {
-                  setEditor(focused);
-                  setActiveSection(sectionId);
-                }}
-                onDelete={() =>
-                  setDeleteTarget({
-                    type: "section",
-                    noteId: note.id,
-                    sectionId: section.id,
-                    title: section.title,
-                  })
-                }
-                onOpenFolder={(folder) =>
-                  void runAction({
-                    type: "folder",
-                    label: "폴더",
-                    path: folder,
-                  })
-                }
-                onCopy={(action) => void runAction(action)}
-                onEditInline={(action, editor, position) =>
-                  openAction(action.type, action, { editor, position })
-                }
-              />
-            ))}
-            <button className="add-section" onClick={addSection}>
-              <Plus size={15} />
-              섹션 추가
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="empty-state">
-          <button className="retro-button" onClick={addNote}>
-            <Plus size={16} />새 메모
-          </button>
-        </div>
-      )}
-      <footer
-        className={`save-status ${saveState === "error" ? "error" : ""}`}
-        role="status"
-      >
-        {saveState === "saved" ? (
-          <>
-            <CheckCheck size={12} />
-            저장됨
-          </>
-        ) : saveState === "saving" ? (
-          "저장 중…"
-        ) : (
-          "저장 오류"
-        )}
-      </footer>
-      <input
-        ref={fileInput}
-        type="file"
-        accept=".json,application/json"
-        className="visually-hidden"
-        aria-label="메모 백업 파일"
-        onChange={(event) => void importBackup(event.target.files?.[0])}
-      />
-      {notice && (
-        <div className="toast" role="status">
-          <span>{notice}</span>
-          <button
-            className="icon-button"
-            aria-label="알림 닫기"
-            onClick={() => setNotice("")}
-          >
-            <X size={15} />
-          </button>
-        </div>
-      )}
-
-      {panel === "notes" && (
-        <Modal title="메모 목록" onClose={() => setPanel(null)}>
-          <div className="search-box">
-            <Search size={15} />
             <input
-              aria-label="메모 검색"
-              placeholder="메모 검색"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              ref={titleInput}
+              className="compact-title"
+              aria-label="메모 제목"
+              placeholder="메모 제목"
+              disabled={!note}
+              value={note?.title || ""}
+              onChange={(event) =>
+                note && updateNote(note.id, { title: event.target.value })
+              }
             />
             <button
-              className={`icon-button ${favorites ? "pressed" : ""}`}
-              aria-label="즐겨찾기만 보기"
-              aria-pressed={favorites}
-              onClick={() => setFavorites((value) => !value)}
+              className="chrome-button"
+              aria-label="새 메모"
+              title="새 메모"
+              onClick={addNote}
             >
-              <Star size={15} fill={favorites ? "currentColor" : "none"} />
+              <Plus size={17} />
             </button>
-          </div>
-          <div className="notes-list">
-            {filteredNotes.map((n, index) => (
-              <div
-                key={n.id}
-                className="note-row"
-                onDragOver={(event) => {
-                  if (
-                    event.dataTransfer.types.includes("application/x-memo-note")
-                  ) {
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = "move";
-                  }
-                }}
-                onDrop={(event) => {
-                  if (
-                    !event.dataTransfer.types.includes(
-                      "application/x-memo-note",
-                    )
-                  )
-                    return;
-                  event.preventDefault();
-                  const source = event.dataTransfer.getData(
-                    "application/x-memo-note",
-                  );
-                  if (source) reorderNotes(source, n.id);
-                }}
-              >
-                <button
-                  className="icon-button drag-handle"
-                  draggable
-                  aria-label={`${n.title || "제목 없음"} 메모 끌어서 이동`}
-                  title="끌어서 순서 변경"
-                  onDragStart={(event) => {
-                    event.dataTransfer.setData("application/x-memo-note", n.id);
-                    event.dataTransfer.effectAllowed = "move";
-                  }}
-                >
-                  <GripVertical size={14} />
-                </button>
-                <button
-                  className={`note-choice ${note?.id === n.id ? "selected" : ""}`}
-                  onClick={() => selectNote(n.id)}
-                >
-                  <span>{n.title || "제목 없음"}</span>
-                  {n.favorite && <Star size={12} fill="currentColor" />}
-                  {note?.id === n.id && <Check size={14} />}
-                </button>
-                <button
-                  className="icon-button"
-                  aria-label={`${n.title || "제목 없음"} 메모 위로 이동`}
-                  disabled={index === 0}
-                  onClick={() =>
-                    reorderNotes(n.id, filteredNotes[index - 1].id)
-                  }
-                >
-                  <ArrowUp size={13} />
-                </button>
-                <button
-                  className="icon-button"
-                  aria-label={`${n.title || "제목 없음"} 메모 아래로 이동`}
-                  disabled={index === filteredNotes.length - 1}
-                  onClick={() =>
-                    reorderNotes(n.id, filteredNotes[index + 1].id)
-                  }
-                >
-                  <ArrowDown size={13} />
-                </button>
-                <button
-                  className="icon-button danger-text"
-                  aria-label={`${n.title || "제목 없음"} 메모 삭제`}
-                  title="메모 삭제"
-                  onClick={() =>
-                    setDeleteTarget({
-                      type: "note",
-                      noteId: n.id,
-                      title: n.title,
-                    })
-                  }
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-            {!filteredNotes.length && (
-              <p className="field-hint">메모가 없습니다.</p>
-            )}
-          </div>
-          <div className="modal-actions">
-            <button className="retro-button" onClick={addNote}>
-              <Plus size={15} />새 메모
-            </button>
-          </div>
-        </Modal>
-      )}
-      {panel === "menu" && (
-        <Modal title="메모 메뉴" onClose={() => setPanel(null)}>
-          <div className="menu-list">
-            <button onClick={exportBackup}>
-              <ArrowDownToLine size={17} />
-              백업 저장
-            </button>
-            <button onClick={() => fileInput.current?.click()}>
-              <ArrowUpFromLine size={17} />
-              백업 가져오기
-            </button>
-            <button onClick={() => setPanel("shortcuts")}>
-              <Settings2 size={17} />
-              바로가기 관리
-            </button>
-            <button onClick={() => setPanel("appearance")}>
-              <Palette size={17} />
-              상단 색상 설정
-            </button>
-            <button onClick={() => void openWindowSettings()}>
-              <Settings2 size={17} />창 크기 설정
-            </button>
-            {note && (
-              <>
-                <button
-                  onClick={() => {
-                    updateNote(note.id, { favorite: !note.favorite });
-                    setPanel(null);
-                  }}
-                >
-                  <Star size={17} />
-                  {note.favorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
-                </button>
-                <button
-                  className="danger-text"
-                  onClick={() => {
-                    setPanel(null);
-                    setDeleteTarget({
-                      type: "note",
-                      noteId: note.id,
-                      title: note.title,
-                    });
-                  }}
-                >
-                  <Trash2 size={17} />
-                  메모 삭제
-                </button>
-              </>
-            )}
-          </div>
-        </Modal>
-      )}
-      {panel === "appearance" && (
-        <Modal title="상단 색상 설정" onClose={() => setPanel(null)}>
-          <label className="field-label" htmlFor="header-color">
-            상단 배경색
-          </label>
-          <div className="header-color-field">
-            <input
-              id="header-color"
-              type="color"
-              value={headerColor}
-              onChange={(event) => setHeaderColor(event.target.value)}
-            />
-            <span>{headerColor.toUpperCase()}</span>
-          </div>
-          <div className="header-color-presets" aria-label="상단 색상 선택">
-            {HEADER_COLORS.map(({ color, name }) => (
-              <button
-                key={color}
-                className="header-color-preset"
-                style={{ backgroundColor: color }}
-                title={name}
-                aria-label={`${name} 상단 색상`}
-                aria-pressed={headerColor.toLowerCase() === color}
-                onClick={() => setHeaderColor(color)}
-              >
-                <span>{headerColor.toLowerCase() === color ? "✓" : ""}</span>
-              </button>
-            ))}
-          </div>
-          <p className="field-hint">
-            제목·버튼 영역·서식 도구의 색상을 변경합니다. 본문 배경색은 그대로
-            유지됩니다.
-          </p>
-          <div className="modal-actions">
             <button
-              className="secondary-button"
-              onClick={() => setHeaderColor(DEFAULT_HEADER_COLOR)}
+              className="chrome-button"
+              aria-label="메모 메뉴"
+              title="메모 메뉴"
+              onClick={() => setPanel("menu")}
             >
-              기본색으로
-            </button>
-            <button className="primary-button" onClick={() => setPanel(null)}>
-              완료
+              <MoreHorizontal size={18} />
             </button>
           </div>
-        </Modal>
-      )}
-      {panel === "window" && (
-        <Modal title="창 크기 설정" onClose={() => setPanel(null)}>
-          <div className="window-dimensions">
-            <label className="field-label">
-              가로 (px)
-              <input
-                className="form-input"
-                type="number"
-                min={320}
-                max={16384}
-                aria-label="창 가로 크기"
-                value={widthInput}
-                disabled={settings.sizeLocked}
-                onChange={(event) => setWidthInput(event.target.value)}
-              />
-            </label>
-            <span>×</span>
-            <label className="field-label">
-              세로 (px)
-              <input
-                className="form-input"
-                type="number"
-                min={360}
-                max={16384}
-                aria-label="창 세로 크기"
-                value={heightInput}
-                disabled={settings.sizeLocked}
-                onChange={(event) => setHeightInput(event.target.value)}
-              />
-            </label>
-          </div>
-          <p className="field-hint">
-            창 가장자리로 크기를 조절할 수 있습니다. 최소 320 × 360px.
-          </p>
-          <label className="setting-switch">
-            <span>현재 크기 고정</span>
+          <div className="quick-tools" aria-label="고정 기능">
             <button
-              className={`retro-button ${settings.sizeLocked ? "pressed" : ""}`}
+              className="retro-button"
+              onClick={() => openAction("folder")}
+            >
+              <FolderPlus size={15} />
+              폴더 추가
+            </button>
+            <button className="retro-button" onClick={() => openAction("copy")}>
+              <ClipboardPlus size={15} />
+              복사 버튼
+            </button>
+            <div className="toolbar-spacer" />
+            <button
+              className={`chrome-button ${settings.alwaysOnTop ? "pressed" : ""}`}
               role="switch"
-              aria-label="설정에서 창 크기 고정"
+              aria-label="항상 위에 표시"
+              aria-checked={settings.alwaysOnTop}
+              title="항상 위에 표시"
+              disabled={windowBusy}
+              onClick={() => void windowAction("top")}
+            >
+              <Pin size={15} />
+            </button>
+            <button
+              className={`chrome-button ${settings.sizeLocked ? "pressed" : ""}`}
+              role="switch"
+              aria-label="창 크기 고정"
               aria-checked={settings.sizeLocked}
+              title={
+                settings.sizeLocked ? "창 크기 고정 해제" : "현재 창 크기 고정"
+              }
               disabled={windowBusy}
               onClick={() => void windowAction("lock")}
             >
-              {settings.sizeLocked ? "켜짐" : "꺼짐"}
-            </button>
-          </label>
-          {windowError && (
-            <p className="field-error" role="alert">
-              {windowError}
-            </p>
-          )}
-          {!native && (
-            <p className="field-hint">Windows 앱에서 사용할 수 있습니다.</p>
-          )}
-          <div className="modal-actions">
-            <button className="secondary-button" onClick={() => setPanel(null)}>
-              닫기
+              {settings.sizeLocked ? (
+                <LockKeyhole size={15} />
+              ) : (
+                <UnlockKeyhole size={15} />
+              )}
             </button>
             <button
-              className="primary-button"
-              disabled={settings.sizeLocked || !native}
-              onClick={() => void resizeWindow()}
+              className="chrome-button"
+              aria-label="창 크기 설정"
+              title="창 크기 설정"
+              onClick={() => void openWindowSettings()}
             >
-              크기 적용
+              <Settings2 size={15} />
             </button>
           </div>
-        </Modal>
-      )}
-      {panel === "shortcuts" && (
-        <Modal title="바로가기 관리" onClose={() => setPanel(null)}>
-          <div className="shortcut-manager">
-            {shortcuts.map((shortcut, index) => (
-              <div key={shortcut.id} className="shortcut-row">
-                <span>
-                  {shortcut.type === "folder" ? (
-                    <Folder size={15} />
-                  ) : (
-                    <ClipboardCopy size={15} />
-                  )}
-                  {shortcut.label}
-                </span>
-                <button
-                  className="icon-button"
-                  aria-label={`${shortcut.label} 왼쪽으로 이동`}
-                  disabled={index === 0}
-                  onClick={() => moveShortcut(shortcut.id, -1)}
-                >
-                  <ArrowLeft size={14} />
-                </button>
-                <button
-                  className="icon-button"
-                  aria-label={`${shortcut.label} 오른쪽으로 이동`}
-                  disabled={index === shortcuts.length - 1}
-                  onClick={() => moveShortcut(shortcut.id, 1)}
-                >
-                  <ArrowRight size={14} />
-                </button>
-                <button
-                  className="icon-button"
-                  aria-label={`${shortcut.label} 수정`}
-                  onClick={() => openAction(shortcut.type, shortcut)}
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  className="icon-button danger-text"
-                  aria-label={`${shortcut.label} 버튼 삭제`}
-                  onClick={() => {
-                    setPanel(null);
-                    setDeleteTarget({
-                      type: "shortcut",
-                      shortcutId: shortcut.id,
-                      title: shortcut.label,
-                    });
-                  }}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-            {!shortcuts.length && (
-              <p className="field-hint">
-                상단의 ‘폴더 추가’ 또는 ‘복사 버튼’으로 추가하세요.
-              </p>
-            )}
-          </div>
-        </Modal>
-      )}
-      {deleteTarget && (
-        <Modal
-          title={
-            deleteTarget.type === "note"
-              ? "메모를 삭제할까요?"
-              : deleteTarget.type === "section"
-                ? "섹션을 삭제할까요?"
-                : "버튼을 삭제할까요?"
-          }
-          onClose={() => setDeleteTarget(null)}
-        >
-          <p className="modal-description">
-            <strong>{deleteTarget.title || "제목 없음"}</strong>
-            {deleteTarget.type === "shortcut"
-              ? " 바로가기 버튼만 삭제됩니다. 폴더와 원본 메모는 유지됩니다."
-              : "의 내용이 삭제됩니다. 이 작업은 되돌릴 수 없습니다."}
-          </p>
-          <div className="modal-actions">
-            <button
-              className="secondary-button"
-              onClick={() => setDeleteTarget(null)}
-            >
-              취소
-            </button>
-            <button className="danger-button" onClick={confirmDelete}>
-              삭제하기
-            </button>
-          </div>
-        </Modal>
-      )}
-      {actionDialog && (
-        <Modal
-          title={`${actionDialog.kind === "folder" ? "폴더" : "복사"} 버튼 ${actionDialog.editingId || actionDialog.inline ? "수정" : "추가"}`}
-          onClose={() => setActionDialog(null)}
-        >
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              saveAction();
-            }}
-          >
-            <label className="field-label" htmlFor="action-label">
-              버튼 이름
-            </label>
-            <input
-              autoFocus
-              id="action-label"
-              className="form-input"
-              value={label}
-              maxLength={80}
-              onChange={(event) => setLabel(event.target.value)}
-              placeholder={
-                actionDialog.kind === "folder" ? "지재권폴더" : "답변 복사"
-              }
-            />
-            {actionDialog.kind === "folder" ? (
-              <>
-                <label className="field-label" htmlFor="action-path">
-                  폴더 경로
-                </label>
-                <div className="folder-path-field">
-                  <input
-                    id="action-path"
-                    className="form-input"
-                    placeholder={"C:\\Users\\이름\\Documents"}
-                    value={path}
-                    onChange={(event) => setPath(event.target.value)}
-                  />
+          {shortcuts.length > 0 && (
+            <div className="shortcut-bar" aria-label="고정 바로가기">
+              <div className="shortcut-scroll">
+                {shortcuts.map((shortcut) => (
                   <button
-                    type="button"
-                    className="secondary-button"
-                    disabled={!native}
-                    onClick={() => void chooseFolder()}
+                    key={shortcut.id}
+                    className={`shortcut-button ${shortcut.type}`}
+                    style={shortcutStyle(shortcut.background)}
+                    title={
+                      shortcut.type === "folder"
+                        ? shortcut.path
+                        : `${shortcut.label} 복사`
+                    }
+                    onClick={() => void runAction(shortcut)}
                   >
-                    찾아보기
+                    {shortcut.type === "folder" ? (
+                      <Folder size={14} />
+                    ) : (
+                      <ClipboardCopy size={14} />
+                    )}
+                    <span>{shortcut.label}</span>
                   </button>
-                </div>
-                {!native && (
-                  <p className="field-hint">
-                    폴더 열기는 Windows 앱에서 동작합니다.
-                  </p>
-                )}
-              </>
-            ) : (
-              <>
-                <fieldset>
-                  <legend>복사할 내용</legend>
-                  <label>
-                    <input
-                      type="radio"
-                      name="copy-mode"
-                      value="note"
-                      checked={copyMode === "note"}
-                      onChange={() => setCopyMode("note")}
-                    />
-                    저장된 메모
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="copy-mode"
-                      value="text"
-                      checked={copyMode === "text"}
-                      onChange={() => setCopyMode("text")}
-                    />
-                    직접 입력한 문구
-                  </label>
-                </fieldset>
-                {copyMode === "note" ? (
-                  <>
-                    <select
-                      className="form-input"
-                      aria-label="복사할 메모"
-                      value={copyNoteId}
-                      onChange={(event) => setCopyNoteId(event.target.value)}
-                    >
-                      <option value="" disabled>
-                        메모 선택
-                      </option>
-                      {data.notes.map((n) => (
-                        <option key={n.id} value={n.id}>
-                          {n.title || "제목 없음"}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="field-hint">
-                      버튼을 누르면 선택한 메모의 최신 본문을 복사합니다.
-                    </p>
-                    <textarea
-                      className="form-input preview-text"
-                      aria-label="복사 내용 미리보기"
-                      readOnly
-                      value={
-                        data.notes.find((n) => n.id === copyNoteId)
-                          ? noteText(
-                              data.notes.find((n) => n.id === copyNoteId)!,
-                            )
-                          : ""
-                      }
-                    />
-                  </>
-                ) : (
-                  <textarea
-                    className="form-input"
-                    rows={5}
-                    aria-label="복사할 문구"
-                    value={copyText}
-                    onChange={(event) => setCopyText(event.target.value)}
-                    placeholder="복사할 문구를 입력하세요."
-                  />
-                )}
-              </>
-            )}
-            <label className="field-label">버튼 배경색</label>
-            <div className="button-color-field">
-              <input
-                type="color"
-                aria-label="버튼 배경색"
-                value={buttonColor}
-                onChange={(event) => {
-                  setButtonColor(event.target.value);
-                  setCustomButtonColor(true);
-                }}
-              />
-              <span
-                className={`shortcut-button ${actionDialog.kind}`}
-                style={customButtonColor ? shortcutStyle(buttonColor) : {}}
-              >
-                {label || "버튼 미리보기"}
-              </span>
+                ))}
+              </div>
               <button
-                type="button"
-                className="secondary-button"
-                onClick={() => {
-                  setButtonColor(
-                    actionDialog.kind === "folder" ? "#e2eecf" : "#e8edf6",
-                  );
-                  setCustomButtonColor(false);
-                }}
+                className="chrome-button"
+                aria-label="바로가기 관리"
+                title="바로가기 관리"
+                onClick={() => setPanel("shortcuts")}
               >
-                버튼 기본색
+                <Pencil size={13} />
               </button>
             </div>
-            {!actionDialog.editingId && !actionDialog.inline && (
-              <fieldset>
-                <legend>추가 위치</legend>
-                <label>
-                  <input
-                    type="radio"
-                    name="placement"
-                    value="top"
-                    checked={placement === "top"}
-                    onChange={() => setPlacement("top")}
-                  />
-                  상단 고정
-                </label>
-                <label>
-                  <input
-                    type="radio"
-                    name="placement"
-                    value="body"
-                    checked={placement === "body"}
-                    disabled={!editor || editor.isDestroyed}
-                    onChange={() => setPlacement("body")}
-                  />
-                  본문 커서 위치
-                </label>
-              </fieldset>
-            )}
-            {actionError && (
+          )}
+          {note && (
+            <Toolbar
+              editor={editor && !editor.isDestroyed ? editor : null}
+              background={note.background}
+              onBackground={(background) => updateNote(note.id, { background })}
+            />
+          )}
+        </header>
+        {saveError && (
+          <div className="storage-warning" role="alert">
+            {saveError}
+            <button onClick={exportBackup}>백업 저장</button>
+          </div>
+        )}
+        {note ? (
+          <div
+            className="paper-scroll"
+            style={{ backgroundColor: note.background }}
+          >
+            <div className="paper-content" key={note.id}>
+              {note.sections.map((section, index) => (
+                <SectionEditor
+                  key={section.id}
+                  section={section}
+                  noteId={note.id}
+                  total={note.sections.length}
+                  onReorder={(source) =>
+                    reorderSections(note.id, source, section.id)
+                  }
+                  onMove={(offset) => {
+                    const target = note.sections[index + offset];
+                    if (target) reorderSections(note.id, section.id, target.id);
+                  }}
+                  index={index}
+                  active={activeSection === section.id}
+                  onChange={(patch) =>
+                    updateSection(note.id, section.id, patch)
+                  }
+                  onFocus={(focused, sectionId) => {
+                    setEditor(focused);
+                    setActiveSection(sectionId);
+                  }}
+                  onDelete={() =>
+                    setDeleteTarget({
+                      type: "section",
+                      noteId: note.id,
+                      sectionId: section.id,
+                      title: section.title,
+                    })
+                  }
+                  onOpenFolder={(folder) =>
+                    void runAction({
+                      type: "folder",
+                      label: "폴더",
+                      path: folder,
+                    })
+                  }
+                  onCopy={(action) => void runAction(action)}
+                  onEditInline={(action, editor, position) =>
+                    openAction(action.type, action, { editor, position })
+                  }
+                />
+              ))}
+              <button className="add-section" onClick={addSection}>
+                <Plus size={15} />
+                섹션 추가
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="empty-state">
+            <button className="retro-button" onClick={addNote}>
+              <Plus size={16} />새 메모
+            </button>
+          </div>
+        )}
+        <footer
+          className={`save-status ${saveState === "error" ? "error" : ""}`}
+          role="status"
+        >
+          {saveState === "saved" ? (
+            <>
+              <CheckCheck size={12} />
+              저장됨
+            </>
+          ) : saveState === "saving" ? (
+            "저장 중…"
+          ) : (
+            "저장 오류"
+          )}
+        </footer>
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".json,application/json"
+          className="visually-hidden"
+          aria-label="메모 백업 파일"
+          onChange={(event) => void importBackup(event.target.files?.[0])}
+        />
+        {notice && (
+          <div className="toast" role="status">
+            <span>{notice}</span>
+            <button
+              className="icon-button"
+              aria-label="알림 닫기"
+              onClick={() => setNotice("")}
+            >
+              <X size={15} />
+            </button>
+          </div>
+        )}
+
+        {panel === "notes" && (
+          <Modal title="메모 목록" onClose={() => setPanel(null)}>
+            <div className="search-box">
+              <Search size={15} />
+              <input
+                aria-label="메모 검색"
+                placeholder="메모 검색"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+              <button
+                className={`icon-button ${favorites ? "pressed" : ""}`}
+                aria-label="즐겨찾기만 보기"
+                aria-pressed={favorites}
+                onClick={() => setFavorites((value) => !value)}
+              >
+                <Star size={15} fill={favorites ? "currentColor" : "none"} />
+              </button>
+            </div>
+            <div className="notes-list">
+              {filteredNotes.map((n, index) => (
+                <div
+                  key={n.id}
+                  className="note-row"
+                  onDragOver={(event) => {
+                    if (
+                      event.dataTransfer.types.includes(
+                        "application/x-memo-note",
+                      )
+                    ) {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                    }
+                  }}
+                  onDrop={(event) => {
+                    if (
+                      !event.dataTransfer.types.includes(
+                        "application/x-memo-note",
+                      )
+                    )
+                      return;
+                    event.preventDefault();
+                    const source = event.dataTransfer.getData(
+                      "application/x-memo-note",
+                    );
+                    if (source) reorderNotes(source, n.id);
+                  }}
+                >
+                  <button
+                    className="icon-button drag-handle"
+                    draggable
+                    aria-label={`${n.title || "제목 없음"} 메모 끌어서 이동`}
+                    title="끌어서 순서 변경"
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData(
+                        "application/x-memo-note",
+                        n.id,
+                      );
+                      event.dataTransfer.effectAllowed = "move";
+                    }}
+                  >
+                    <GripVertical size={14} />
+                  </button>
+                  <button
+                    className={`note-choice ${note?.id === n.id ? "selected" : ""}`}
+                    onClick={() => selectNote(n.id)}
+                  >
+                    <span>{n.title || "제목 없음"}</span>
+                    {n.favorite && <Star size={12} fill="currentColor" />}
+                    {note?.id === n.id && <Check size={14} />}
+                  </button>
+                  <button
+                    className="icon-button"
+                    aria-label={`${n.title || "제목 없음"} 메모 위로 이동`}
+                    disabled={index === 0}
+                    onClick={() =>
+                      reorderNotes(n.id, filteredNotes[index - 1].id)
+                    }
+                  >
+                    <ArrowUp size={13} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    aria-label={`${n.title || "제목 없음"} 메모 아래로 이동`}
+                    disabled={index === filteredNotes.length - 1}
+                    onClick={() =>
+                      reorderNotes(n.id, filteredNotes[index + 1].id)
+                    }
+                  >
+                    <ArrowDown size={13} />
+                  </button>
+                  <button
+                    className="icon-button danger-text"
+                    aria-label={`${n.title || "제목 없음"} 메모 삭제`}
+                    title="메모 삭제"
+                    onClick={() =>
+                      setDeleteTarget({
+                        type: "note",
+                        noteId: n.id,
+                        title: n.title,
+                      })
+                    }
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+              {!filteredNotes.length && (
+                <p className="field-hint">메모가 없습니다.</p>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button className="retro-button" onClick={addNote}>
+                <Plus size={15} />새 메모
+              </button>
+            </div>
+          </Modal>
+        )}
+        {panel === "menu" && (
+          <Modal title="메모 메뉴" onClose={() => setPanel(null)}>
+            <div className="menu-list">
+              <button onClick={exportBackup}>
+                <ArrowDownToLine size={17} />
+                백업 저장
+              </button>
+              <button onClick={() => fileInput.current?.click()}>
+                <ArrowUpFromLine size={17} />
+                백업 가져오기
+              </button>
+              <button onClick={() => setPanel("shortcuts")}>
+                <Settings2 size={17} />
+                바로가기 관리
+              </button>
+              <button onClick={() => setPanel("appearance")}>
+                <Palette size={17} />
+                상단 색상 설정
+              </button>
+              <button onClick={() => void openWindowSettings()}>
+                <Settings2 size={17} />창 크기 설정
+              </button>
+              {note && (
+                <>
+                  <button
+                    onClick={() => {
+                      updateNote(note.id, { favorite: !note.favorite });
+                      setPanel(null);
+                    }}
+                  >
+                    <Star size={17} />
+                    {note.favorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
+                  </button>
+                  <button
+                    className="danger-text"
+                    onClick={() => {
+                      setPanel(null);
+                      setDeleteTarget({
+                        type: "note",
+                        noteId: note.id,
+                        title: note.title,
+                      });
+                    }}
+                  >
+                    <Trash2 size={17} />
+                    메모 삭제
+                  </button>
+                </>
+              )}
+            </div>
+          </Modal>
+        )}
+        {panel === "appearance" && (
+          <Modal title="상단 색상 설정" onClose={() => setPanel(null)}>
+            <ColorFields
+              name="상단 배경색"
+              value={headerColor}
+              onSelect={setHeaderColor}
+            />
+            <div className="header-color-presets" aria-label="상단 색상 선택">
+              {HEADER_COLORS.map(({ color, name }) => (
+                <button
+                  key={color}
+                  className="header-color-preset"
+                  style={{ backgroundColor: color }}
+                  title={name}
+                  aria-label={`${name} 상단 색상`}
+                  aria-pressed={headerColor.toLowerCase() === color}
+                  onClick={() => {
+                    setHeaderColor(color);
+                    rememberColor(color);
+                  }}
+                >
+                  <span>{headerColor.toLowerCase() === color ? "✓" : ""}</span>
+                </button>
+              ))}
+            </div>
+            <details className="appearance-details">
+              <summary>창·팝업·선 색상 설정</summary>
+              <ColorFields
+                name="창·팝업 배경색"
+                value={data.appearance?.surfaceColor || "#f5f5f5"}
+                onSelect={(color) => setAppearance({ surfaceColor: color })}
+              />
+              <ColorFields
+                name="화면 글씨색"
+                value={data.appearance?.inkColor || "#000000"}
+                onSelect={(color) => setAppearance({ inkColor: color })}
+              />
+              <ColorFields
+                name="화면 테두리색"
+                value={data.appearance?.lineColor || "#000000"}
+                onSelect={(color) => setAppearance({ lineColor: color })}
+              />
+            </details>
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                onClick={() =>
+                  setAppearance({
+                    headerColor: DEFAULT_HEADER_COLOR,
+                    surfaceColor: "#f5f5f5",
+                    inkColor: "#000000",
+                    lineColor: "#000000",
+                  })
+                }
+              >
+                기본색으로
+              </button>
+              <button className="primary-button" onClick={() => setPanel(null)}>
+                완료
+              </button>
+            </div>
+          </Modal>
+        )}
+        {panel === "window" && (
+          <Modal title="창 크기 설정" onClose={() => setPanel(null)}>
+            <div className="window-dimensions">
+              <label className="field-label">
+                가로 (px)
+                <input
+                  className="form-input"
+                  type="number"
+                  min={320}
+                  max={16384}
+                  aria-label="창 가로 크기"
+                  value={widthInput}
+                  disabled={settings.sizeLocked}
+                  onChange={(event) => setWidthInput(event.target.value)}
+                />
+              </label>
+              <span>×</span>
+              <label className="field-label">
+                세로 (px)
+                <input
+                  className="form-input"
+                  type="number"
+                  min={360}
+                  max={16384}
+                  aria-label="창 세로 크기"
+                  value={heightInput}
+                  disabled={settings.sizeLocked}
+                  onChange={(event) => setHeightInput(event.target.value)}
+                />
+              </label>
+            </div>
+            <p className="field-hint">
+              창 가장자리로 크기를 조절할 수 있습니다. 최소 320 × 360px.
+            </p>
+            <label className="setting-switch">
+              <span>현재 크기 고정</span>
+              <button
+                className={`retro-button ${settings.sizeLocked ? "pressed" : ""}`}
+                role="switch"
+                aria-label="설정에서 창 크기 고정"
+                aria-checked={settings.sizeLocked}
+                disabled={windowBusy}
+                onClick={() => void windowAction("lock")}
+              >
+                {settings.sizeLocked ? "켜짐" : "꺼짐"}
+              </button>
+            </label>
+            {windowError && (
               <p className="field-error" role="alert">
-                {actionError}
+                {windowError}
               </p>
+            )}
+            {!native && (
+              <p className="field-hint">Windows 앱에서 사용할 수 있습니다.</p>
             )}
             <div className="modal-actions">
               <button
-                type="button"
                 className="secondary-button"
-                onClick={() => setActionDialog(null)}
+                onClick={() => setPanel(null)}
+              >
+                닫기
+              </button>
+              <button
+                className="primary-button"
+                disabled={settings.sizeLocked || !native}
+                onClick={() => void resizeWindow()}
+              >
+                크기 적용
+              </button>
+            </div>
+          </Modal>
+        )}
+        {panel === "shortcuts" && (
+          <Modal title="바로가기 관리" onClose={() => setPanel(null)}>
+            <details className="batch-colors">
+              <summary>버튼 색상 일괄 변경</summary>
+              <p className="field-hint">
+                상단 및 모든 메모 본문의 버튼을 선택하세요.
+              </p>
+              <label className="checkbox-field">
+                <input
+                  type="checkbox"
+                  aria-label="버튼 전체 선택"
+                  checked={
+                    buttons.length > 0 &&
+                    selectedButtons.length === buttons.length
+                  }
+                  onChange={(event) =>
+                    setCheckedButtons(
+                      event.target.checked ? buttons.map((b) => b.key) : [],
+                    )
+                  }
+                />
+                전체 선택
+              </label>
+              <div className="batch-button-list">
+                {buttons.map((button) => (
+                  <label className="checkbox-field" key={button.key}>
+                    <input
+                      type="checkbox"
+                      aria-label={`${button.label} 색상 선택 (${button.location})`}
+                      checked={checkedButtons.includes(button.key)}
+                      onChange={() => toggleButton(button.key)}
+                    />
+                    <span>
+                      {button.label}
+                      <small>{button.location}</small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <ColorFields
+                name="일괄 버튼 배경색"
+                value={batchColor}
+                onSelect={setBatchColor}
+              />
+              <div className="modal-actions">
+                <button
+                  className="secondary-button"
+                  disabled={!selectedButtons.length}
+                  onClick={() => applyBatchColor(true)}
+                >
+                  선택 버튼 기본색
+                </button>
+                <button
+                  className="primary-button"
+                  disabled={!selectedButtons.length}
+                  onClick={() => applyBatchColor()}
+                >
+                  {selectedButtons.length}개 버튼에 적용
+                </button>
+              </div>
+            </details>
+            <div className="shortcut-manager">
+              {shortcuts.map((shortcut, index) => (
+                <div key={shortcut.id} className="shortcut-row">
+                  <span>
+                    {shortcut.type === "folder" ? (
+                      <Folder size={15} />
+                    ) : (
+                      <ClipboardCopy size={15} />
+                    )}
+                    {shortcut.label}
+                  </span>
+                  <button
+                    className="icon-button"
+                    aria-label={`${shortcut.label} 왼쪽으로 이동`}
+                    disabled={index === 0}
+                    onClick={() => moveShortcut(shortcut.id, -1)}
+                  >
+                    <ArrowLeft size={14} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    aria-label={`${shortcut.label} 오른쪽으로 이동`}
+                    disabled={index === shortcuts.length - 1}
+                    onClick={() => moveShortcut(shortcut.id, 1)}
+                  >
+                    <ArrowRight size={14} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    aria-label={`${shortcut.label} 수정`}
+                    onClick={() => openAction(shortcut.type, shortcut)}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    className="icon-button danger-text"
+                    aria-label={`${shortcut.label} 버튼 삭제`}
+                    onClick={() => {
+                      setPanel(null);
+                      setDeleteTarget({
+                        type: "shortcut",
+                        shortcutId: shortcut.id,
+                        title: shortcut.label,
+                      });
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+              {!shortcuts.length && (
+                <p className="field-hint">
+                  상단의 ‘폴더 추가’ 또는 ‘복사 버튼’으로 추가하세요.
+                </p>
+              )}
+            </div>
+          </Modal>
+        )}
+        {deleteTarget && (
+          <Modal
+            title={
+              deleteTarget.type === "note"
+                ? "메모를 삭제할까요?"
+                : deleteTarget.type === "section"
+                  ? "섹션을 삭제할까요?"
+                  : "버튼을 삭제할까요?"
+            }
+            onClose={() => setDeleteTarget(null)}
+          >
+            <p className="modal-description">
+              <strong>{deleteTarget.title || "제목 없음"}</strong>
+              {deleteTarget.type === "shortcut"
+                ? " 바로가기 버튼만 삭제됩니다. 폴더와 원본 메모는 유지됩니다."
+                : "의 내용이 삭제됩니다. 이 작업은 되돌릴 수 없습니다."}
+            </p>
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                onClick={() => setDeleteTarget(null)}
               >
                 취소
               </button>
-              <button type="submit" className="primary-button">
-                {actionDialog.editingId || actionDialog.inline
-                  ? "저장"
-                  : "버튼 추가"}
+              <button className="danger-button" onClick={confirmDelete}>
+                삭제하기
               </button>
             </div>
-          </form>
-        </Modal>
-      )}
-      {backup && (
-        <Modal title="백업 메모를 가져올까요?" onClose={() => setBackup(null)}>
-          <p className="modal-description">
-            메모 {backup.notes.length}개와 바로가기{" "}
-            {(backup.shortcuts || []).length}개를 추가합니다. 기존 메모는
-            유지됩니다.
-          </p>
-          <div className="modal-actions">
-            <button
-              className="secondary-button"
-              onClick={() => setBackup(null)}
+          </Modal>
+        )}
+        {actionDialog && (
+          <Modal
+            title={`${actionDialog.kind === "folder" ? "폴더" : "복사"} 버튼 ${actionDialog.editingId || actionDialog.inline ? "수정" : "추가"}`}
+            onClose={() => setActionDialog(null)}
+          >
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                saveAction();
+              }}
             >
-              취소
-            </button>
-            <button className="primary-button" onClick={confirmImport}>
-              가져오기
-            </button>
-          </div>
-        </Modal>
-      )}
-    </main>
+              <label className="field-label" htmlFor="action-label">
+                버튼 이름
+              </label>
+              <input
+                autoFocus
+                id="action-label"
+                className="form-input"
+                value={label}
+                maxLength={80}
+                onChange={(event) => setLabel(event.target.value)}
+                placeholder={
+                  actionDialog.kind === "folder" ? "지재권폴더" : "답변 복사"
+                }
+              />
+              {actionDialog.kind === "folder" ? (
+                <>
+                  <label className="field-label" htmlFor="action-path">
+                    폴더 경로
+                  </label>
+                  <div className="folder-path-field">
+                    <input
+                      id="action-path"
+                      className="form-input"
+                      placeholder={"C:\\Users\\이름\\Documents"}
+                      value={path}
+                      onChange={(event) => setPath(event.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={!native}
+                      onClick={() => void chooseFolder()}
+                    >
+                      찾아보기
+                    </button>
+                  </div>
+                  {!native && (
+                    <p className="field-hint">
+                      폴더 열기는 Windows 앱에서 동작합니다.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <fieldset>
+                    <legend>복사할 내용</legend>
+                    <label>
+                      <input
+                        type="radio"
+                        name="copy-mode"
+                        value="note"
+                        checked={copyMode === "note"}
+                        onChange={() => setCopyMode("note")}
+                      />
+                      저장된 메모
+                    </label>
+                    <label>
+                      <input
+                        type="radio"
+                        name="copy-mode"
+                        value="text"
+                        checked={copyMode === "text"}
+                        onChange={() => setCopyMode("text")}
+                      />
+                      직접 입력한 문구
+                    </label>
+                  </fieldset>
+                  {copyMode === "note" ? (
+                    <>
+                      <select
+                        className="form-input"
+                        aria-label="복사할 메모"
+                        value={copyNoteId}
+                        onChange={(event) => setCopyNoteId(event.target.value)}
+                      >
+                        <option value="" disabled>
+                          메모 선택
+                        </option>
+                        {data.notes.map((n) => (
+                          <option key={n.id} value={n.id}>
+                            {n.title || "제목 없음"}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="field-hint">
+                        버튼을 누르면 선택한 메모의 최신 본문을 복사합니다.
+                      </p>
+                      <textarea
+                        className="form-input preview-text"
+                        aria-label="복사 내용 미리보기"
+                        readOnly
+                        value={
+                          data.notes.find((n) => n.id === copyNoteId)
+                            ? noteText(
+                                data.notes.find((n) => n.id === copyNoteId)!,
+                              )
+                            : ""
+                        }
+                      />
+                    </>
+                  ) : (
+                    <textarea
+                      className="form-input"
+                      rows={5}
+                      aria-label="복사할 문구"
+                      value={copyText}
+                      onChange={(event) => setCopyText(event.target.value)}
+                      placeholder="복사할 문구를 입력하세요."
+                    />
+                  )}
+                </>
+              )}
+              <ColorFields
+                name="버튼 배경색"
+                value={buttonColor}
+                onSelect={(color) => {
+                  setButtonColor(color);
+                  setCustomButtonColor(true);
+                }}
+              />
+              <div className="button-color-field">
+                <span
+                  className={`shortcut-button ${actionDialog.kind}`}
+                  style={customButtonColor ? shortcutStyle(buttonColor) : {}}
+                >
+                  {label || "버튼 미리보기"}
+                </span>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => {
+                    setButtonColor("#f5f5f5");
+                    setCustomButtonColor(false);
+                  }}
+                >
+                  버튼 기본색
+                </button>
+              </div>
+              {!actionDialog.editingId && !actionDialog.inline && (
+                <fieldset>
+                  <legend>추가 위치</legend>
+                  <label>
+                    <input
+                      type="radio"
+                      name="placement"
+                      value="top"
+                      checked={placement === "top"}
+                      onChange={() => setPlacement("top")}
+                    />
+                    상단 고정
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="placement"
+                      value="body"
+                      checked={placement === "body"}
+                      disabled={!editor || editor.isDestroyed}
+                      onChange={() => setPlacement("body")}
+                    />
+                    본문 커서 위치
+                  </label>
+                </fieldset>
+              )}
+              {actionError && (
+                <p className="field-error" role="alert">
+                  {actionError}
+                </p>
+              )}
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setActionDialog(null)}
+                >
+                  취소
+                </button>
+                <button type="submit" className="primary-button">
+                  {actionDialog.editingId || actionDialog.inline
+                    ? "저장"
+                    : "버튼 추가"}
+                </button>
+              </div>
+            </form>
+          </Modal>
+        )}
+        {backup && (
+          <Modal
+            title="백업 메모를 가져올까요?"
+            onClose={() => setBackup(null)}
+          >
+            <p className="modal-description">
+              메모 {backup.notes.length}개와 바로가기{" "}
+              {(backup.shortcuts || []).length}개를 추가합니다. 기존 메모는
+              유지됩니다.
+            </p>
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                onClick={() => setBackup(null)}
+              >
+                취소
+              </button>
+              <button className="primary-button" onClick={confirmImport}>
+                가져오기
+              </button>
+            </div>
+          </Modal>
+        )}
+      </main>
+    </ColorsContext.Provider>
   );
 }

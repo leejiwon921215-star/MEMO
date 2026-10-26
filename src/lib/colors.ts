@@ -25,7 +25,7 @@ export function validPalettes(value: unknown): value is ColorPalettes {
       palette.recent.length <= 12 &&
       palette.recent.every(isHexColor) &&
       Array.isArray(palette.favorites) &&
-      palette.favorites.length <= 32 &&
+      palette.favorites.length <= 64 &&
       palette.favorites.every(isHexColor)
     );
   });
@@ -56,22 +56,36 @@ export function shortcutStyle(background?: string | null): CSSProperties {
     ? {
         backgroundColor: background,
         color: readableInk(background),
-        borderColor: readableInk(background),
-        boxShadow: "inset 1px 1px #ffffff80, inset -1px -1px #00000020",
+        borderColor: "var(--ui-line, #000000)",
+        boxShadow: "none",
       }
     : {};
+}
+// Keep the version-one shape readable by older backups while sharing one palette.
+export function sharedPalette(palettes: ColorPalettes): ColorPalette {
+  const unique = (colors: string[]) => [
+    ...new Set(colors.map((c) => c.toLowerCase())),
+  ];
+  return {
+    recent: unique([
+      ...palettes.text.recent,
+      ...palettes.highlight.recent,
+    ]).slice(0, 12),
+    favorites: unique([
+      ...palettes.text.favorites,
+      ...palettes.highlight.favorites,
+    ]).slice(0, 64),
+  };
 }
 export function mergePalettes(
   current: ColorPalettes,
   backup: ColorPalettes,
 ): ColorPalettes {
-  const merge = (kind: ColorKind) => ({
-    recent: [
-      ...new Set([...backup[kind].recent, ...current[kind].recent]),
-    ].slice(0, 12),
-    favorites: [
-      ...new Set([...current[kind].favorites, ...backup[kind].favorites]),
-    ].slice(0, 32),
-  });
-  return { text: merge("text"), highlight: merge("highlight") };
+  const a = sharedPalette(current),
+    b = sharedPalette(backup);
+  const shared = {
+    recent: [...new Set([...b.recent, ...a.recent])].slice(0, 12),
+    favorites: [...new Set([...a.favorites, ...b.favorites])].slice(0, 64),
+  };
+  return { text: shared, highlight: shared };
 }

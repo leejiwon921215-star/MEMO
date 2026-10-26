@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { ColorsContext } from "./ColorFields";
+import { useContext, useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 export function Modal({
@@ -12,6 +13,7 @@ export function Modal({
   children: ReactNode;
   className?: string;
 }) {
+  const { theme } = useContext(ColorsContext);
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   useEffect(() => {
@@ -20,6 +22,7 @@ export function Modal({
   return createPortal(
     <dialog
       ref={ref}
+      style={theme}
       className={`modal ${className}`}
       aria-labelledby={titleId}
       onCancel={(event) => {

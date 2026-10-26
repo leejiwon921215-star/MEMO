@@ -1,3 +1,4 @@
+import type { Appearance } from "./theme";
 import {
   emptyPalettes,
   isHexColor,
@@ -31,7 +32,7 @@ export interface MemoData {
   notes: Note[];
   selectedId: string | null;
   shortcuts?: Shortcut[];
-  appearance?: { headerColor: string };
+  appearance?: Appearance;
   colorPalettes?: ColorPalettes;
 }
 export type NativeResult = { ok: true } | { ok: false; error: string };
@@ -104,7 +105,12 @@ export function isMemoData(value: unknown): value is MemoData {
         typeof data.appearance === "object" &&
         !Array.isArray(data.appearance) &&
         typeof data.appearance.headerColor === "string" &&
-        /^#[0-9a-f]{6}$/i.test(data.appearance.headerColor))) &&
+        /^#[0-9a-f]{6}$/i.test(data.appearance.headerColor) &&
+        [
+          data.appearance.surfaceColor,
+          data.appearance.inkColor,
+          data.appearance.lineColor,
+        ].every((c) => c === undefined || isHexColor(c)))) &&
     (data.selectedId === null || typeof data.selectedId === "string") &&
     Array.isArray(data.notes) &&
     data.notes.length <= 10000 &&

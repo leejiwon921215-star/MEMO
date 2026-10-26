@@ -82,6 +82,10 @@ export function SectionEditor({
     if (editor && index === 0) callbacks.current.onFocus(editor, section.id);
   }, [editor, section.id, index]);
   useEffect(() => {
+    if (editor && editor.getHTML() !== section.content)
+      editor.commands.setContent(section.content, { emitUpdate: false });
+  }, [editor, section.content]);
+  useEffect(() => {
     editor?.setOptions({
       editorProps: {
         attributes: {

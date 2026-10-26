@@ -56,7 +56,7 @@ async function menu(page: Page) {
   await page.getByRole("button", { name: "메모 메뉴", exact: true }).click();
 }
 async function color(page: Page, name: string, value: string) {
-  const palette = name === "글씨색" || name === "강조색";
+  const palette = ["글씨색", "강조색", "메모 배경색"].includes(name);
   if (palette)
     await page
       .getByRole("button", { name: `${name} 선택`, exact: true })
@@ -72,7 +72,7 @@ async function color(page: Page, name: string, value: string) {
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
     }, value);
-  if (name === "글씨색")
+  if (name === "글씨색" || name === "메모 배경색")
     await page.getByRole("button", { name: "완료", exact: true }).click();
 }
 async function mockClipboard(page: Page) {
@@ -633,7 +633,7 @@ test("header colors persist globally, preserve the white paper, and can be reset
   await page.reload();
   await expect(page.locator(".note-bar")).toHaveCSS(
     "background-color",
-    "rgb(215, 226, 202)",
+    "rgb(238, 238, 238)",
   );
 });
 
@@ -866,7 +866,7 @@ test("line spacing and paragraph margins apply to selected paragraphs and persis
   await expect(body(page).locator("p").first()).toHaveCSS("margin-top", "6px");
 });
 
-test("text and highlight colors have separate recent lists and favorite colors", async ({
+test("text and highlight colors share recent lists and favorite colors", async ({
   page,
 }) => {
   await open(page);
@@ -894,7 +894,7 @@ test("text and highlight colors have separate recent lists and favorite colors",
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "글씨색 즐겨찾기 #ffeebb", exact: true }),
-  ).toHaveCount(0);
+  ).toBeVisible();
   await page.getByRole("button", { name: "완료", exact: true }).click();
   await page.getByRole("button", { name: "강조색 선택", exact: true }).click();
   await expect(
@@ -1086,4 +1086,335 @@ test("unformatted existing and newly typed paragraphs use single spacing with ze
       nodes.map((node) => node.getBoundingClientRect().top),
     );
   expect(after[1] - after[0]).toBeCloseTo(16, 1);
+});
+
+test("sections shrink to fit content, grow for long lists, and shrink after deletion", async ({
+  page,
+}) => {
+  await open(page);
+  const editor = body(page);
+  expect((await editor.boundingBox())!.height).toBeLessThan(70);
+  await editor.fill(
+    Array.from({ length: 20 }, (_, i) => `목록 ${i}`).join("\n"),
+  );
+  const tall = (await editor.boundingBox())!.height;
+  expect(tall).toBeGreaterThan(300);
+  expect(
+    await editor.evaluate((el) => el.scrollHeight <= el.clientHeight + 1),
+  ).toBe(true);
+  await editor.fill("짧은 메모");
+  expect((await editor.boundingBox())!.height).toBeLessThan(60);
+  await page.reload();
+  expect((await body(page).boundingBox())!.height).toBeLessThan(60);
+  await body(page).fill("");
+  await body(page).pressSequentially("다시 입력");
+  await expect(body(page)).toHaveText("다시 입력");
+});
+
+test("default dialogs and folder/copy buttons use neutral surfaces with black text and borders", async ({
+  page,
+}) => {
+  const seed = structuredClone(legacy) as any;
+  seed.shortcuts = [
+    { id: "folder", type: "folder", label: "기본 폴더", path: "C:\\Docs" },
+    {
+      id: "copy",
+      type: "copy",
+      label: "기본 복사",
+      mode: "text",
+      text: "복사 내용",
+    },
+  ];
+  seed.notes[0].sections[0].content +=
+    '<p><span data-copy-button data-label="본문 복사" data-mode="text" data-text="문구">본문 복사</span></p>';
+  await page.addInitScript(
+    ({ key, seed }) => {
+      if (!localStorage.getItem(key))
+        localStorage.setItem(key, JSON.stringify(seed));
+    },
+    { key: KEY, seed },
+  );
+  await open(page, false);
+  for (const button of [
+    page.getByRole("button", { name: "기본 폴더", exact: true }),
+    page.getByRole("button", { name: "기본 복사", exact: true }),
+    page.locator(".copy-inline"),
+  ]) {
+    await expect(button).toHaveCSS("color", "rgb(0, 0, 0)");
+    await expect(button).toHaveCSS("border-top-color", "rgb(0, 0, 0)");
+    await expect(button).toHaveCSS("background-color", "rgb(245, 245, 245)");
+  }
+  await page.getByRole("button", { name: "강조색 선택", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "형광색" });
+  await expect(dialog).toHaveCSS("background-color", "rgb(245, 245, 245)");
+  await expect(dialog).toHaveCSS("color", "rgb(0, 0, 0)");
+  await expect(dialog).toHaveCSS("border-top-color", "rgb(0, 0, 0)");
+  await expect(dialog.locator(".modal-header")).toHaveCSS(
+    "background-color",
+    "rgb(245, 245, 245)",
+  );
+});
+
+test("legacy palettes merge and favorites are available in button, text, highlight, header and body colors", async ({
+  page,
+}) => {
+  const seed = {
+    ...legacy,
+    colorPalettes: {
+      text: { recent: ["#112233"], favorites: ["#112233"] },
+      highlight: { recent: ["#eeccaa"], favorites: ["#eeccaa"] },
+    },
+  };
+  await page.addInitScript(
+    ({ key, seed }) => {
+      if (!localStorage.getItem(key))
+        localStorage.setItem(key, JSON.stringify(seed));
+    },
+    { key: KEY, seed },
+  );
+  await open(page, false);
+  await page.getByRole("button", { name: "폴더 추가", exact: true }).click();
+  await expect(
+    page.getByRole("button", {
+      name: "버튼 배경색 즐겨찾기 #112233",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: "버튼 배경색 즐겨찾기 #eeccaa",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await color(page, "버튼 배경색", "#aabbcc");
+  await page
+    .getByRole("button", { name: "현재 버튼 배경색 즐겨찾기", exact: true })
+    .click();
+  await page.getByRole("button", { name: "취소", exact: true }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "글씨색 선택", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "글씨색 즐겨찾기 #aabbcc", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "완료", exact: true }).click();
+  await page.getByRole("button", { name: "강조색 선택", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "강조색 즐겨찾기 #aabbcc", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "닫기", exact: true }).click();
+  await menu(page);
+  await page
+    .getByRole("button", { name: "상단 색상 설정", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "상단 배경색 즐겨찾기 #aabbcc", exact: true })
+    .click();
+  await expect(page.locator(".note-bar")).toHaveCSS(
+    "background-color",
+    "rgb(170, 187, 204)",
+  );
+  await page.getByRole("button", { name: "완료", exact: true }).click();
+  await page
+    .getByRole("button", { name: "메모 배경색 선택", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "메모 배경색 즐겨찾기 #aabbcc", exact: true })
+    .click();
+  await page.getByRole("button", { name: "완료", exact: true }).click();
+  await expect(page.locator(".paper-scroll")).toHaveCSS(
+    "background-color",
+    "rgb(170, 187, 204)",
+  );
+  await page.reload();
+  const stored = await page.evaluate(
+    (key) => JSON.parse(localStorage.getItem(key)!),
+    KEY,
+  );
+  expect(stored.colorPalettes.text).toEqual(stored.colorPalettes.highlight);
+  expect(stored.colorPalettes.text.favorites).toEqual([
+    "#112233",
+    "#eeccaa",
+    "#aabbcc",
+  ]);
+});
+
+test("global popup, text and border colors persist and reset to black gray and white", async ({
+  page,
+}) => {
+  await open(page);
+  await menu(page);
+  await page
+    .getByRole("button", { name: "상단 색상 설정", exact: true })
+    .click();
+  await page.getByText("창·팝업·선 색상 설정", { exact: true }).click();
+  await color(page, "창·팝업 배경색", "#ddeeff");
+  await color(page, "화면 글씨색", "#123456");
+  await color(page, "화면 테두리색", "#332211");
+  await page.getByRole("button", { name: "완료", exact: true }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "강조색 선택", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "형광색" });
+  await expect(dialog).toHaveCSS("background-color", "rgb(221, 238, 255)");
+  await expect(dialog).toHaveCSS("color", "rgb(18, 52, 86)");
+  await expect(dialog).toHaveCSS("border-top-color", "rgb(51, 34, 17)");
+  await page.getByRole("button", { name: "닫기", exact: true }).click();
+  await menu(page);
+  await page
+    .getByRole("button", { name: "상단 색상 설정", exact: true })
+    .click();
+  await page.getByRole("button", { name: "기본색으로", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCSS(
+    "background-color",
+    "rgb(245, 245, 245)",
+  );
+  await expect(page.getByRole("dialog")).toHaveCSS("color", "rgb(0, 0, 0)");
+});
+
+test("batch colors affect only checked top and inline buttons across notes, preserve actions and reset", async ({
+  page,
+}) => {
+  await mockClipboard(page);
+  const seed = structuredClone(legacy) as any;
+  seed.shortcuts = [
+    { id: "top1", type: "folder", label: "상단 폴더", path: "C:\\Docs" },
+    {
+      id: "top2",
+      type: "copy",
+      label: "제외 복사",
+      mode: "text",
+      text: "원본",
+      background: "#aabbcc",
+    },
+  ];
+  seed.notes[0].sections[0].content +=
+    '<p><span data-copy-button data-label="본문 문구" data-mode="text" data-text="그대로 복사">본문 문구</span></p>';
+  seed.notes[1].sections[0].content +=
+    '<p><span data-folder-button data-label="다른 메모 폴더" data-path="C:\\Other">다른 메모 폴더</span></p>';
+  await page.addInitScript(
+    ({ key, seed }) => {
+      if (!localStorage.getItem(key))
+        localStorage.setItem(key, JSON.stringify(seed));
+    },
+    { key: KEY, seed },
+  );
+  await open(page, false);
+  await page
+    .getByRole("button", { name: "바로가기 관리", exact: true })
+    .click();
+  await page.getByText("버튼 색상 일괄 변경", { exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "0개 버튼에 적용", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("checkbox", { name: "버튼 전체 선택", exact: true })
+    .check();
+  await page
+    .getByRole("checkbox", { name: "제외 복사 색상 선택 (상단)", exact: true })
+    .uncheck();
+  await color(page, "일괄 버튼 배경색", "#ffddaa");
+  await page
+    .getByRole("button", { name: "3개 버튼에 적용", exact: true })
+    .click();
+  await page.getByRole("button", { name: "닫기", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "상단 폴더", exact: true }),
+  ).toHaveCSS("background-color", "rgb(255, 221, 170)");
+  await expect(page.locator(".copy-inline")).toHaveCSS(
+    "background-color",
+    "rgb(255, 221, 170)",
+  );
+  await expect(
+    page.getByRole("button", { name: "제외 복사", exact: true }),
+  ).toHaveCSS("background-color", "rgb(170, 187, 204)");
+  await page.locator(".copy-inline").click();
+  expect(await page.evaluate(() => sessionStorage.getItem("copied"))).toBe(
+    "그대로 복사",
+  );
+  await page.reload();
+  await expect(page.locator(".copy-inline")).toHaveCSS(
+    "background-color",
+    "rgb(255, 221, 170)",
+  );
+  await page.getByRole("button", { name: "메모 목록", exact: true }).click();
+  await page.getByRole("button", { name: "답변 문구", exact: true }).click();
+  await expect(page.locator(".folder-inline")).toHaveCSS(
+    "background-color",
+    "rgb(255, 221, 170)",
+  );
+  await page
+    .getByRole("button", { name: "바로가기 관리", exact: true })
+    .click();
+  await page.getByText("버튼 색상 일괄 변경", { exact: true }).click();
+  await page
+    .getByRole("checkbox", { name: "버튼 전체 선택", exact: true })
+    .check();
+  await page
+    .getByRole("button", { name: "선택 버튼 기본색", exact: true })
+    .click();
+  await page.getByRole("button", { name: "닫기", exact: true }).click();
+  await expect(page.locator(".folder-inline")).toHaveCSS(
+    "background-color",
+    "rgb(245, 245, 245)",
+  );
+  await expect(
+    page.getByRole("button", { name: "제외 복사", exact: true }),
+  ).toHaveCSS("background-color", "rgb(245, 245, 245)");
+  await page.reload();
+  await expect(page.locator(".folder-inline")).toHaveCSS(
+    "background-color",
+    "rgb(245, 245, 245)",
+  );
+});
+
+test("all 64 legacy favorite colors survive merging and batch controls fit a 320px window", async ({
+  page,
+}) => {
+  const colors = Array.from(
+    { length: 64 },
+    (_, i) => "#" + (i * 257).toString(16).padStart(6, "0"),
+  );
+  const seed = {
+    ...legacy,
+    colorPalettes: {
+      text: { recent: [], favorites: colors.slice(0, 32) },
+      highlight: { recent: [], favorites: colors.slice(32) },
+    },
+  };
+  await page.setViewportSize({ width: 320, height: 600 });
+  await page.addInitScript(
+    ({ key, seed }) => {
+      if (!localStorage.getItem(key))
+        localStorage.setItem(key, JSON.stringify(seed));
+    },
+    { key: KEY, seed },
+  );
+  await open(page, false);
+  await folder(page);
+  await menu(page);
+  await page
+    .getByRole("dialog", { name: "메모 메뉴" })
+    .getByRole("button", { name: "바로가기 관리", exact: true })
+    .click();
+  await page.getByText("버튼 색상 일괄 변경", { exact: true }).click();
+  await page
+    .getByRole("checkbox", { name: "버튼 전체 선택", exact: true })
+    .check();
+  await expect(
+    page.getByRole("button", { name: /^일괄 버튼 배경색 즐겨찾기 #/ }),
+  ).toHaveCount(64);
+  await expect(page.getByRole("dialog")).toBeVisible();
+  expect(
+    await page
+      .getByRole("dialog")
+      .evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+  ).toBe(true);
+  await page
+    .getByRole("button", { name: "1개 버튼에 적용", exact: true })
+    .click();
+  await page.getByRole("button", { name: "닫기", exact: true }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "글씨색 선택", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: /^글씨색 즐겨찾기 #/ }),
+  ).toHaveCount(64);
 });

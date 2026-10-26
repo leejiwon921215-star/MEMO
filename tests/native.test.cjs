@@ -4,6 +4,7 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 const { _electron: electron } = require("playwright");
+const { validData } = require("../electron/data.cjs");
 const { validateFolder } = require("../electron/folders.cjs");
 
 test("folder validation rejects URLs, relative paths, files and missing folders", async () => {
@@ -28,6 +29,46 @@ test("folder validation rejects URLs, relative paths, files and missing folders"
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
+});
+
+test("color settings validate old data, shared favorites and custom appearance", () => {
+  const base = { version: 1, selectedId: null, notes: [] };
+  assert.equal(validData(base), true);
+  const palette = {
+    recent: ["#112233"],
+    favorites: Array.from(
+      { length: 64 },
+      (_, i) => "#" + i.toString(16).padStart(6, "0"),
+    ),
+  };
+  const current = {
+    ...base,
+    appearance: {
+      headerColor: "#eeeeee",
+      surfaceColor: "#f5f5f5",
+      inkColor: "#000000",
+      lineColor: "#000000",
+    },
+    colorPalettes: { text: palette, highlight: palette },
+  };
+  assert.equal(validData(current), true);
+  assert.equal(
+    validData({
+      ...current,
+      appearance: { ...current.appearance, lineColor: "bad" },
+    }),
+    false,
+  );
+  assert.equal(
+    validData({
+      ...current,
+      colorPalettes: {
+        text: { ...palette, favorites: [...palette.favorites, "#ffffff"] },
+        highlight: palette,
+      },
+    }),
+    false,
+  );
 });
 
 test(
@@ -268,6 +309,15 @@ test(
         .waitFor();
       await restoredPage
         .getByRole("button", { name: "완료", exact: true })
+        .click();
+      await restoredPage
+        .getByRole("button", { name: "강조색 선택", exact: true })
+        .click();
+      await restoredPage
+        .getByRole("button", { name: "강조색 즐겨찾기 #d93025", exact: true })
+        .waitFor();
+      await restoredPage
+        .getByRole("button", { name: "닫기", exact: true })
         .click();
       assert.equal(
         await restoredPage

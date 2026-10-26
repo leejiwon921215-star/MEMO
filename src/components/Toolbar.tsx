@@ -1,6 +1,8 @@
+import { useState } from "react";
+import { Modal } from "./Modal";
+import { ColorFields } from "./ColorFields";
 import { ColorPicker } from "./ColorPicker";
 import { EditorExtras } from "./EditorExtras";
-import type { ColorKind, ColorPalettes } from "../lib/colors";
 import { useEditorState, type Editor } from "@tiptap/react";
 import {
   AlignLeft,
@@ -21,18 +23,9 @@ interface Props {
   editor: Editor | null;
   background: string;
   onBackground: (color: string) => void;
-  palettes: ColorPalettes;
-  onRememberColor: (kind: ColorKind, color: string) => void;
-  onFavoriteColor: (kind: ColorKind, color: string) => void;
 }
-export function Toolbar({
-  editor,
-  background,
-  onBackground,
-  palettes,
-  onRememberColor,
-  onFavoriteColor,
-}: Props) {
+export function Toolbar({ editor, background, onBackground }: Props) {
+  const [backgroundOpen, setBackgroundOpen] = useState(false);
   const state = useEditorState({
     editor,
     selector: ({ editor: e }) =>
@@ -143,23 +136,17 @@ export function Toolbar({
         kind="text"
         value={state?.color || "#000000"}
         disabled={!editor}
-        palette={palettes.text}
         onSelect={(color) => {
           run((e) => e.chain().focus().setColor(color).run());
-          onRememberColor("text", color);
         }}
-        onFavorite={(color) => onFavoriteColor("text", color)}
       />
       <ColorPicker
         kind="highlight"
         value={state?.highlight || "#fff0ad"}
         disabled={!editor}
-        palette={palettes.highlight}
         onSelect={(color) => {
           run((e) => e.chain().focus().setBackgroundColor(color).run());
-          onRememberColor("highlight", color);
         }}
-        onFavorite={(color) => onFavoriteColor("highlight", color)}
       />
       <span className="toolbar-divider" />
       {(
@@ -225,15 +212,31 @@ export function Toolbar({
       </button>
       <span className="toolbar-divider" />
       <EditorExtras editor={editor} />
-      <label className="tool-button color-tool" title="메모 배경색">
+      <button
+        className="tool-button"
+        title="메모 배경색"
+        aria-label="메모 배경색 선택"
+        onClick={() => setBackgroundOpen(true)}
+      >
         <PaintBucket size={16} />
-        <input
-          type="color"
-          aria-label="메모 배경색"
-          value={background}
-          onChange={(event) => onBackground(event.target.value)}
-        />
-      </label>
+      </button>
+      {backgroundOpen && (
+        <Modal title="메모 배경색" onClose={() => setBackgroundOpen(false)}>
+          <ColorFields
+            name="메모 배경색"
+            value={background}
+            onSelect={onBackground}
+          />
+          <div className="modal-actions">
+            <button
+              className="primary-button"
+              onClick={() => setBackgroundOpen(false)}
+            >
+              완료
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

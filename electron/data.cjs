@@ -12,7 +12,7 @@ function validPalettes(value) {
         p.recent.length <= 12 &&
         p.recent.every(isHex) &&
         Array.isArray(p.favorites) &&
-        p.favorites.length <= 32 &&
+        p.favorites.length <= 64 &&
         p.favorites.every(isHex)
       );
     })
@@ -27,7 +27,12 @@ function validData(data) {
         typeof data.appearance !== "object" ||
         Array.isArray(data.appearance) ||
         typeof data.appearance.headerColor !== "string" ||
-        !/^#[0-9a-f]{6}$/i.test(data.appearance.headerColor))) ||
+        !/^#[0-9a-f]{6}$/i.test(data.appearance.headerColor) ||
+        ![
+          data.appearance.surfaceColor,
+          data.appearance.inkColor,
+          data.appearance.lineColor,
+        ].every((c) => c === undefined || isHex(c)))) ||
     !Array.isArray(data.notes) ||
     data.notes.length > 10000 ||
     (data.selectedId !== null && typeof data.selectedId !== "string")
