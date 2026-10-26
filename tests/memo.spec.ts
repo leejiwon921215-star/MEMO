@@ -852,7 +852,7 @@ test("line spacing and paragraph margins apply to selected paragraphs and persis
   );
   await expect(body(page, "기록 내용").locator("p")).toHaveCSS(
     "line-height",
-    "28.8px",
+    "16px",
   );
   await expect(body(page, "기록 내용").locator("p")).toHaveCSS(
     "margin-bottom",
@@ -1047,4 +1047,43 @@ test("highlight colors apply and close immediately without a Done button", async
     "background-color",
     "rgb(255, 255, 0)",
   );
+});
+
+test("unformatted existing and newly typed paragraphs use single spacing with zero extra margins", async ({
+  page,
+}) => {
+  await open(page);
+  const previous = body(page).locator("p");
+  const before = await previous.evaluateAll((nodes) =>
+    nodes.map((node) => ({
+      top: node.getBoundingClientRect().top,
+      height: node.getBoundingClientRect().height,
+    })),
+  );
+  expect(before[1].top - before[0].top).toBeCloseTo(16, 1);
+  await body(page).fill("첫째");
+  await body(page).click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("둘째");
+  await page
+    .getByRole("button", { name: "줄 간격과 문단 여백", exact: true })
+    .click();
+  await expect(
+    page.getByRole("combobox", { name: "줄 간격", exact: true }),
+  ).toHaveValue("1");
+  await expect(
+    page.getByRole("spinbutton", { name: "문단 위 여백", exact: true }),
+  ).toHaveValue("0");
+  await expect(
+    page.getByRole("spinbutton", { name: "문단 아래 여백", exact: true }),
+  ).toHaveValue("0");
+  await page.getByRole("button", { name: "취소", exact: true }).click();
+  await page.reload();
+  const after = await body(page)
+    .locator("p")
+    .evaluateAll((nodes) =>
+      nodes.map((node) => node.getBoundingClientRect().top),
+    );
+  expect(after[1] - after[0]).toBeCloseTo(16, 1);
 });

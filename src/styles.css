@@ -435,7 +435,7 @@ svg {
 .tiptap {
   font-family: "Malgun Gothic", "Noto Sans CJK KR", sans-serif;
   font-size: 16px;
-  line-height: 1.8;
+  line-height: 1;
   color: #000;
   min-height: 145px;
   padding: 12px 13px 17px;
@@ -446,7 +446,7 @@ svg {
   outline: none;
 }
 .tiptap p {
-  margin: 0 0 7px;
+  margin: 0;
 }
 .tiptap p:last-child {
   margin-bottom: 0;
@@ -463,8 +463,8 @@ svg {
 .tiptap h1,
 .tiptap h2,
 .tiptap h3 {
-  line-height: 1.4;
-  margin: 10px 0;
+  line-height: 1;
+  margin: 0;
 }
 .tiptap:has(> p:only-child > br.ProseMirror-trailingBreak)::before {
   content: attr(data-placeholder);

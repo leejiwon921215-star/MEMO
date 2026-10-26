@@ -6,9 +6,9 @@ export function EditorExtras({ editor }: { editor: Editor | null }) {
   const [dialog, setDialog] = useState<
     "spacing" | "insert" | "row" | "column" | "table" | null
   >(null);
-  const [height, setHeight] = useState("1.8");
+  const [height, setHeight] = useState("1");
   const [before, setBefore] = useState("0");
-  const [after, setAfter] = useState("7");
+  const [after, setAfter] = useState("0");
   const [rows, setRows] = useState("3");
   const [columns, setColumns] = useState("3");
   const [header, setHeader] = useState(true);
@@ -28,9 +28,9 @@ export function EditorExtras({ editor }: { editor: Editor | null }) {
     if (editor && !editor.isDestroyed) command(editor);
   };
   const showSpacing = () => {
-    setHeight(state?.attrs.lineHeight || "1.8");
+    setHeight(state?.attrs.lineHeight || "1");
     setBefore(String(parseFloat(state?.attrs.spaceBefore || "0")));
-    setAfter(String(parseFloat(state?.attrs.spaceAfter || "7")));
+    setAfter(String(parseFloat(state?.attrs.spaceAfter || "0")));
     setDialog("spacing");
   };
   return (

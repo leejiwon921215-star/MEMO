@@ -9,7 +9,9 @@ export const ParagraphSpacing = Extension.create({
           lineHeight: {
             default: null,
             parseHTML: (el) =>
-              /^(1|1\.2|1\.5|1\.8|2|2\.5|3)$/.test(el.style.lineHeight)
+              ["1", "1.2", "1.5", "1.8", "2", "2.5", "3"].includes(
+                el.style.lineHeight,
+              )
                 ? el.style.lineHeight
                 : null,
             renderHTML: (attrs) =>
