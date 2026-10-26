@@ -151,6 +151,22 @@ test(
         "감사합니다.\n좋은 하루 보내세요.",
       );
       await page.getByRole("status").filter({ hasText: "저장됨" }).waitFor();
+      await page
+        .getByRole("button", { name: "메모 메뉴", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "상단 색상 설정", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "연보라 상단 색상", exact: true })
+        .click();
+      await page.getByRole("button", { name: "완료", exact: true }).click();
+      await page.getByRole("status").filter({ hasText: "저장됨" }).waitFor();
+      assert.equal(
+        JSON.parse(await fs.readFile(path.join(userData, "memos.json"), "utf8"))
+          .appearance.headerColor,
+        "#e8d9ec",
+      );
       await app.evaluate(({ shell, dialog }, selected) => {
         globalThis.__openedFolder = null;
         shell.openPath = async (folder) => {
@@ -208,6 +224,12 @@ test(
       assert.equal(
         await app.evaluate(({ clipboard }) => clipboard.readText()),
         "감사합니다.\n좋은 하루 보내세요.",
+      );
+      assert.equal(
+        await restoredPage
+          .locator(".note-bar")
+          .evaluate((el) => getComputedStyle(el).backgroundColor),
+        "rgb(232, 217, 236)",
       );
       const restoredSettings = await restoredPage.evaluate(() =>
         window.memoDesktop.getWindowSettings(),

@@ -379,6 +379,7 @@ test("backup import preserves existing notes and remaps copy-button references",
   await page.getByRole("button", { name: "백업 저장", exact: true }).click();
   expect((await downloadPromise).suggestedFilename()).toMatch(/^MEMO-백업-/);
   const backup = {
+    appearance: { headerColor: "#d6e6f4" },
     version: 1,
     selectedId: "note-1",
     notes: [
@@ -414,6 +415,10 @@ test("backup import preserves existing notes and remaps copy-button references",
   await expect
     .poll(() => page.evaluate(() => sessionStorage.getItem("copied")))
     .toContain("백업의 본문");
+  await expect(page.locator(".note-bar")).toHaveCSS(
+    "background-color",
+    "rgb(214, 230, 244)",
+  );
   await body(page, "가져온 섹션 내용").fill("가져온 메모만 수정");
   await page.getByRole("button", { name: "백업 복사", exact: true }).click();
   await expect
@@ -569,4 +574,134 @@ test("compact desktop screenshot has no runtime errors", async ({ page }) => {
     fullPage: true,
   });
   expect(errors).toEqual([]);
+});
+
+test("header colors persist globally, preserve the white paper, and can be reset", async ({
+  page,
+}) => {
+  await open(page);
+  await menu(page);
+  await page
+    .getByRole("button", { name: "상단 색상 설정", exact: true })
+    .click();
+  await color(page, "상단 배경색", "#ddaacc");
+  await expect(page.locator(".note-bar")).toHaveCSS(
+    "background-color",
+    "rgb(221, 170, 204)",
+  );
+  await expect(page.locator(".paper-scroll")).toHaveCSS(
+    "background-color",
+    "rgb(255, 255, 255)",
+  );
+  await page.getByRole("button", { name: "완료", exact: true }).click();
+  await page.getByRole("button", { name: "새 메모", exact: true }).click();
+  await page.reload();
+  await expect(page.locator(".note-bar")).toHaveCSS(
+    "background-color",
+    "rgb(221, 170, 204)",
+  );
+  await menu(page);
+  await page
+    .getByRole("button", { name: "상단 색상 설정", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "진회색 상단 색상", exact: true })
+    .click();
+  await expect(page.locator(".note-bar")).toHaveCSS(
+    "color",
+    "rgb(255, 255, 255)",
+  );
+  await page.getByRole("button", { name: "기본색으로", exact: true }).click();
+  await page.getByRole("button", { name: "완료", exact: true }).click();
+  await page.reload();
+  await expect(page.locator(".note-bar")).toHaveCSS(
+    "background-color",
+    "rgb(215, 226, 202)",
+  );
+});
+
+test("shortcuts wrap downward and long labels remain readable at 320px", async ({
+  page,
+}) => {
+  const labels = [
+    "업무 자료 폴더",
+    "프로젝트 관리",
+    "회의록과 참고 자료",
+    "자주 쓰는 답변",
+    "이름이아주긴바로가기버튼도창너비에맞춰여러줄로끝까지표시되어야합니다",
+  ];
+  await page.addInitScript(
+    (data) => localStorage.setItem("memo-studio.v1", JSON.stringify(data)),
+    {
+      ...legacy,
+      appearance: { headerColor: "#e8d9ec" },
+      shortcuts: labels.map((label, index) =>
+        index === 3
+          ? {
+              id: `shortcut-${index}`,
+              type: "copy",
+              label,
+              mode: "text",
+              text: "감사합니다.",
+            }
+          : {
+              id: `shortcut-${index}`,
+              type: "folder",
+              label,
+              path: "C:\\Documents",
+            },
+      ),
+    },
+  );
+  await page.setViewportSize({ width: 900, height: 760 });
+  await open(page, false);
+  const wideHeight = (await page.locator(".shortcut-bar").boundingBox())!
+    .height;
+  await page.setViewportSize({ width: 320, height: 760 });
+  const buttons = page.locator(".shortcut-button");
+  await expect(buttons).toHaveCount(labels.length);
+  const bounds = await buttons.evaluateAll((buttons) =>
+    buttons.map((button) => {
+      const box = button.getBoundingClientRect();
+      const label = button.querySelector("span")!;
+      return {
+        left: box.left,
+        right: box.right,
+        top: box.top,
+        labelWidth: label.clientWidth,
+        labelScrollWidth: label.scrollWidth,
+      };
+    }),
+  );
+  expect(new Set(bounds.map((box) => box.top)).size).toBeGreaterThan(1);
+  for (const box of bounds) {
+    expect(box.left).toBeGreaterThanOrEqual(0);
+    expect(box.right).toBeLessThanOrEqual(320);
+    expect(box.labelScrollWidth).toBeLessThanOrEqual(box.labelWidth);
+  }
+  expect(
+    (await page.locator(".shortcut-bar").boundingBox())!.height,
+  ).toBeGreaterThan(wideHeight);
+  expect(
+    await page
+      .locator(".shortcut-scroll")
+      .evaluate((el) => el.scrollWidth <= el.clientWidth),
+  ).toBe(true);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(320);
+  await page
+    .getByRole("button", { name: labels[3], exact: true })
+    .scrollIntoViewIfNeeded();
+  await page
+    .getByRole("button", { name: "바로가기 관리", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "바로가기 관리" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "닫기", exact: true }).click();
+  await page.screenshot({
+    path: "test-results/memo-wrapped.png",
+    fullPage: true,
+  });
 });

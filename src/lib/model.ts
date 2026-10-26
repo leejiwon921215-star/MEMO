@@ -22,6 +22,7 @@ export interface MemoData {
   notes: Note[];
   selectedId: string | null;
   shortcuts?: Shortcut[];
+  appearance?: { headerColor: string };
 }
 export type NativeResult = { ok: true } | { ok: false; error: string };
 export interface WindowSettings {
@@ -86,6 +87,12 @@ export function isMemoData(value: unknown): value is MemoData {
   };
   return (
     data.version === 1 &&
+    (data.appearance === undefined ||
+      (data.appearance !== null &&
+        typeof data.appearance === "object" &&
+        !Array.isArray(data.appearance) &&
+        typeof data.appearance.headerColor === "string" &&
+        /^#[0-9a-f]{6}$/i.test(data.appearance.headerColor))) &&
     (data.selectedId === null || typeof data.selectedId === "string") &&
     Array.isArray(data.notes) &&
     data.notes.length <= 10000 &&
@@ -198,6 +205,7 @@ export function mergeBackup(current: MemoData, backup: MemoData): MemoData {
   }));
   return {
     ...current,
+    ...(backup.appearance ? { appearance: { ...backup.appearance } } : {}),
     notes: [...notes, ...current.notes],
     selectedId: notes[0]?.id || current.selectedId,
     shortcuts: [...(current.shortcuts || []), ...shortcuts],

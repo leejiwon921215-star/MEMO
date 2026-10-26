@@ -24,10 +24,12 @@ import {
   UnlockKeyhole,
   X,
   Pencil,
+  Palette,
 } from "lucide-react";
 import { Modal } from "./components/Modal";
 import { SectionEditor } from "./components/SectionEditor";
 import { Toolbar } from "./components/Toolbar";
+import { DEFAULT_HEADER_COLOR, HEADER_COLORS, headerTheme } from "./lib/theme";
 import {
   id,
   initialData,
@@ -62,7 +64,7 @@ export default function App() {
   const [editor, setEditor] = useState<Editor | null>(null);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [panel, setPanel] = useState<
-    "notes" | "menu" | "shortcuts" | "window" | null
+    "notes" | "menu" | "shortcuts" | "window" | "appearance" | null
   >(null);
   const [search, setSearch] = useState("");
   const [favorites, setFavorites] = useState(false);
@@ -93,6 +95,14 @@ export default function App() {
   const native = !!window.memoDesktop;
   const note = data?.notes.find((n) => n.id === data.selectedId) || null;
   const shortcuts = data?.shortcuts || [];
+  const headerColor = data?.appearance?.headerColor || DEFAULT_HEADER_COLOR;
+
+  function setHeaderColor(color: string) {
+    setData(
+      (current) =>
+        current && { ...current, appearance: { headerColor: color } },
+    );
+  }
 
   useEffect(() => {
     let canceled = false;
@@ -554,7 +564,7 @@ export default function App() {
   if (!data) return <div className="loading">불러오는 중…</div>;
   return (
     <main className="memo-app">
-      <header className="pinned-header">
+      <header className="pinned-header" style={headerTheme(headerColor)}>
         <div className="note-bar">
           <button
             className="chrome-button"
@@ -827,6 +837,10 @@ export default function App() {
               <Settings2 size={17} />
               바로가기 관리
             </button>
+            <button onClick={() => setPanel("appearance")}>
+              <Palette size={17} />
+              상단 색상 설정
+            </button>
             <button onClick={() => void openWindowSettings()}>
               <Settings2 size={17} />창 크기 설정
             </button>
@@ -857,6 +871,52 @@ export default function App() {
                 </button>
               </>
             )}
+          </div>
+        </Modal>
+      )}
+      {panel === "appearance" && (
+        <Modal title="상단 색상 설정" onClose={() => setPanel(null)}>
+          <label className="field-label" htmlFor="header-color">
+            상단 배경색
+          </label>
+          <div className="header-color-field">
+            <input
+              id="header-color"
+              type="color"
+              value={headerColor}
+              onChange={(event) => setHeaderColor(event.target.value)}
+            />
+            <span>{headerColor.toUpperCase()}</span>
+          </div>
+          <div className="header-color-presets" aria-label="상단 색상 선택">
+            {HEADER_COLORS.map(({ color, name }) => (
+              <button
+                key={color}
+                className="header-color-preset"
+                style={{ backgroundColor: color }}
+                title={name}
+                aria-label={`${name} 상단 색상`}
+                aria-pressed={headerColor.toLowerCase() === color}
+                onClick={() => setHeaderColor(color)}
+              >
+                <span>{headerColor.toLowerCase() === color ? "✓" : ""}</span>
+              </button>
+            ))}
+          </div>
+          <p className="field-hint">
+            제목·버튼 영역·서식 도구의 색상을 변경합니다. 본문 배경색은 그대로
+            유지됩니다.
+          </p>
+          <div className="modal-actions">
+            <button
+              className="secondary-button"
+              onClick={() => setHeaderColor(DEFAULT_HEADER_COLOR)}
+            >
+              기본색으로
+            </button>
+            <button className="primary-button" onClick={() => setPanel(null)}>
+              완료
+            </button>
           </div>
         </Modal>
       )}

@@ -1,6 +1,6 @@
 {
   "name": "memo-studio",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "서식과 섹션, 폴더 바로가기가 있는 나만의 메모장",
   "main": "electron/main.cjs",

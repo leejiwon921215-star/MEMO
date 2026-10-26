@@ -1,6 +1,12 @@
 function validData(data) {
   if (
     data?.version !== 1 ||
+    (data.appearance !== undefined &&
+      (!data.appearance ||
+        typeof data.appearance !== "object" ||
+        Array.isArray(data.appearance) ||
+        typeof data.appearance.headerColor !== "string" ||
+        !/^#[0-9a-f]{6}$/i.test(data.appearance.headerColor))) ||
     !Array.isArray(data.notes) ||
     data.notes.length > 10000 ||
     (data.selectedId !== null && typeof data.selectedId !== "string")

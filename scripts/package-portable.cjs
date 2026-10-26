@@ -79,6 +79,34 @@ async function main() {
     .update(fs.readFileSync(exe))
     .digest("hex");
   fs.writeFileSync(`${exe}.sha256`, `${hash}  ${path.basename(exe)}\n`);
+  const zip = path.join(dir, `MEMO-Windows-${version}.zip`);
+  const guide = path.join(dir, "사용안내.txt");
+  fs.writeFileSync(
+    guide,
+    "\ufeff기존 MEMO를 완전히 종료한 뒤 압축을 모두 풀고 동봉된 EXE 파일을 실행하세요.\n메모와 설정은 %APPDATA%\\MEMO에 유지됩니다.\n코드 서명이 없는 개발 빌드이므로 Windows 확인창이 나타날 수 있습니다.\n",
+    "utf8",
+  );
+  fs.rmSync(zip, { force: true });
+  await run(
+    sevenZip,
+    [
+      "a",
+      "-tzip",
+      "-mx=0",
+      "-bso0",
+      zip,
+      path.basename(exe),
+      path.basename(guide),
+    ],
+    dir,
+  );
+  await run(sevenZip, ["t", zip, "-bso0"]);
+  const zipHash = crypto
+    .createHash("sha256")
+    .update(fs.readFileSync(zip))
+    .digest("hex");
+  fs.writeFileSync(`${zip}.sha256`, `${zipHash}  ${path.basename(zip)}\n`);
+  console.log(`Windows ZIP: ${zip}`);
   console.log(
     `Portable Windows app: ${exe} (${(fs.statSync(exe).size / 1024 / 1024).toFixed(1)} MiB)`,
   );
