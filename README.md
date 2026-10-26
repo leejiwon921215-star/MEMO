@@ -1,3 +1,30 @@
+# MEMO 1.3.2 — Windows
+
+**[Windows ZIP 다운로드](https://github.com/leejiwon921215-star/MEMO/raw/refs/heads/downloads/MEMO-Windows-1.3.2.zip)**
+
+[실행 파일만 다운로드](https://github.com/leejiwon921215-star/MEMO/raw/refs/heads/downloads/MEMO-Windows-1.3.2.exe)
+
+기존 앱을 완전히 종료하고 ZIP을 모두 압축 해제한 뒤 MEMO-Windows-1.3.2.exe를 실행하세요. 기존 메모와 설정은 유지됩니다.
+
+- 기본 줄 간격 1배, 문단 위·아래 여백 0px (직접 설정한 간격은 유지)
+- 섹션 테두리·구분선은 검정, 옅은 배경은 회색으로 정리 (사용자 지정 색상은 유지)
+- 형광색은 선택 즉시 적용되고 색상창 자동 닫기 (완료 버튼 불필요)
+- 메모 목록에서 삭제 확인 후 삭제, 메모와 섹션을 끌거나 위·아래 버튼으로 정렬
+- 선택한 문단의 줄 간격과 위·아래 여백 조절
+- 전체 UI 기본 고딕 글꼴
+- 글씨색·형광색의 최근 사용 색과 즐겨찾기 저장
+- 표 삽입, 행·열 추가·삭제, 표 삭제 확인
+- 폴더·복사 버튼별 배경색 조절, 본문 버튼은 오른쪽 클릭으로 수정
+- Windows 실행 파일과 앱 창의 귀여운 도트 메모장 아이콘
+
+브라우저 기능 검사 27개와 실제 Electron 저장·복원·클립보드 등 검사 2개가 통과했습니다. 화면이 필요한 창 겹침 검사는 Linux 환경에서 건너뛰었으며 실제 Windows 실행은 최종 확인이 필요합니다. 앱은 코드 서명이 없는 개발 빌드입니다.
+
+Source: https://github.com/leejiwon921215-star/MEMO/tree/v1.3.2
+
+---
+
+## 이전 배포 안내
+
 # MEMO 1.3.1 — Windows
 
 **[Windows ZIP 다운로드](https://github.com/leejiwon921215-star/MEMO/raw/refs/heads/downloads/MEMO-Windows-1.3.1.zip)**
