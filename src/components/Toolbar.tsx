@@ -1,4 +1,6 @@
-import { useRef } from "react";
+import { ColorPicker } from "./ColorPicker";
+import { EditorExtras } from "./EditorExtras";
+import type { ColorKind, ColorPalettes } from "../lib/colors";
 import { useEditorState, type Editor } from "@tiptap/react";
 import {
   AlignLeft,
@@ -19,10 +21,18 @@ interface Props {
   editor: Editor | null;
   background: string;
   onBackground: (color: string) => void;
+  palettes: ColorPalettes;
+  onRememberColor: (kind: ColorKind, color: string) => void;
+  onFavoriteColor: (kind: ColorKind, color: string) => void;
 }
-export function Toolbar({ editor, background, onBackground }: Props) {
-  const fontColor = useRef<HTMLInputElement>(null);
-  const highlightColor = useRef<HTMLInputElement>(null);
+export function Toolbar({
+  editor,
+  background,
+  onBackground,
+  palettes,
+  onRememberColor,
+  onFavoriteColor,
+}: Props) {
   const state = useEditorState({
     editor,
     selector: ({ editor: e }) =>
@@ -54,6 +64,7 @@ export function Toolbar({ editor, background, onBackground }: Props) {
       role="toolbar"
       aria-label="글 서식"
       onMouseDown={(event) => {
+        if ((event.target as HTMLElement).closest("dialog")) return;
         if ((event.target as HTMLElement).closest("button"))
           event.preventDefault();
       }}
@@ -128,49 +139,28 @@ export function Toolbar({ editor, background, onBackground }: Props) {
       >
         <Underline size={17} />
       </button>
-      <label
-        className={`tool-button color-tool ${!editor ? "disabled" : ""}`}
-        title="글씨색"
-      >
-        <span style={{ borderColor: state?.color }}>A</span>
-        <input
-          ref={fontColor}
-          type="color"
-          aria-label="글씨색"
-          disabled={!editor}
-          value={
-            /^#[a-f0-9]{6}$/i.test(state?.color || "")
-              ? state!.color
-              : "#000000"
-          }
-          onChange={(event) =>
-            run((e) => e.chain().focus().setColor(event.target.value).run())
-          }
-        />
-      </label>
-      <label className="tool-button color-tool" title="강조색">
-        <Highlighter size={17} />
-        <span
-          className="highlight-line"
-          style={{ background: state?.highlight }}
-        />
-        <input
-          ref={highlightColor}
-          type="color"
-          aria-label="강조색"
-          disabled={!editor}
-          value={
-            /^#[a-f0-9]{6}$/i.test(state?.highlight || "")
-              ? state!.highlight
-              : "#fff0ad"
-          }
-          onChange={(event) =>
-            run((e) =>
-              e.chain().focus().setBackgroundColor(event.target.value).run(),
-            )
-          }
-        />
-      </label>
+      <ColorPicker
+        kind="text"
+        value={state?.color || "#000000"}
+        disabled={!editor}
+        palette={palettes.text}
+        onSelect={(color) => {
+          run((e) => e.chain().focus().setColor(color).run());
+          onRememberColor("text", color);
+        }}
+        onFavorite={(color) => onFavoriteColor("text", color)}
+      />
+      <ColorPicker
+        kind="highlight"
+        value={state?.highlight || "#fff0ad"}
+        disabled={!editor}
+        palette={palettes.highlight}
+        onSelect={(color) => {
+          run((e) => e.chain().focus().setBackgroundColor(color).run());
+          onRememberColor("highlight", color);
+        }}
+        onFavorite={(color) => onFavoriteColor("highlight", color)}
+      />
       <span className="toolbar-divider" />
       {(
         [
@@ -234,6 +224,7 @@ export function Toolbar({ editor, background, onBackground }: Props) {
         <Redo2 size={17} />
       </button>
       <span className="toolbar-divider" />
+      <EditorExtras editor={editor} />
       <label className="tool-button color-tool" title="메모 배경색">
         <PaintBucket size={16} />
         <input

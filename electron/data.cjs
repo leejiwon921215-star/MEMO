@@ -1,6 +1,27 @@
+const isHex = (value) =>
+  typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
+function validPalettes(value) {
+  return (
+    value &&
+    typeof value === "object" &&
+    ["text", "highlight"].every((kind) => {
+      const p = value[kind];
+      return (
+        p &&
+        Array.isArray(p.recent) &&
+        p.recent.length <= 12 &&
+        p.recent.every(isHex) &&
+        Array.isArray(p.favorites) &&
+        p.favorites.length <= 32 &&
+        p.favorites.every(isHex)
+      );
+    })
+  );
+}
 function validData(data) {
   if (
     data?.version !== 1 ||
+    (data.colorPalettes !== undefined && !validPalettes(data.colorPalettes)) ||
     (data.appearance !== undefined &&
       (!data.appearance ||
         typeof data.appearance !== "object" ||
@@ -46,6 +67,7 @@ function validData(data) {
             a &&
             unique(a.id) &&
             typeof a.label === "string" &&
+            (a.background === undefined || isHex(a.background)) &&
             (a.type === "folder"
               ? typeof a.path === "string"
               : a.type === "copy" &&

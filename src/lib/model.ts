@@ -1,3 +1,10 @@
+import {
+  emptyPalettes,
+  isHexColor,
+  mergePalettes,
+  validPalettes,
+  type ColorPalettes,
+} from "./colors";
 export interface Section {
   id: string;
   title: string;
@@ -11,11 +18,13 @@ export interface Note {
   updatedAt: string;
   sections: Section[];
 }
-export type CopyAction =
+export type CopyAction = (
   | { type: "copy"; label: string; mode: "text"; text: string }
-  | { type: "copy"; label: string; mode: "note"; noteId: string };
+  | { type: "copy"; label: string; mode: "note"; noteId: string }
+) & { background?: string };
 export type Action =
-  { type: "folder"; label: string; path: string } | CopyAction;
+  | { type: "folder"; label: string; path: string; background?: string }
+  | CopyAction;
 export type Shortcut = Action & { id: string };
 export interface MemoData {
   version: 1;
@@ -23,6 +32,7 @@ export interface MemoData {
   selectedId: string | null;
   shortcuts?: Shortcut[];
   appearance?: { headerColor: string };
+  colorPalettes?: ColorPalettes;
 }
 export type NativeResult = { ok: true } | { ok: false; error: string };
 export interface WindowSettings {
@@ -68,6 +78,7 @@ export function isAction(action: unknown): action is Action {
   const a = action as Record<string, unknown>;
   return (
     typeof a.label === "string" &&
+    (a.background === undefined || isHexColor(a.background)) &&
     (a.type === "folder"
       ? typeof a.path === "string"
       : a.type === "copy" &&
@@ -87,6 +98,7 @@ export function isMemoData(value: unknown): value is MemoData {
   };
   return (
     data.version === 1 &&
+    (data.colorPalettes === undefined || validPalettes(data.colorPalettes)) &&
     (data.appearance === undefined ||
       (data.appearance !== null &&
         typeof data.appearance === "object" &&
@@ -137,6 +149,12 @@ export function textWithLines(html: string): string {
     if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
     if (!(node instanceof Element)) return "";
     if (["SCRIPT", "STYLE"].includes(node.tagName)) return "";
+    if (node.tagName === "TR")
+      return (
+        [...node.children]
+          .map((cell) => text(cell).replace(/\n$/, ""))
+          .join("\t") + "\n"
+      );
     if (node.tagName === "BR") return "\n";
     const inner = [...node.childNodes].map(text).join("");
     return (
@@ -206,6 +224,14 @@ export function mergeBackup(current: MemoData, backup: MemoData): MemoData {
   return {
     ...current,
     ...(backup.appearance ? { appearance: { ...backup.appearance } } : {}),
+    ...(backup.colorPalettes
+      ? {
+          colorPalettes: mergePalettes(
+            current.colorPalettes || emptyPalettes(),
+            backup.colorPalettes,
+          ),
+        }
+      : {}),
     notes: [...notes, ...current.notes],
     selectedId: notes[0]?.id || current.selectedId,
     shortcuts: [...(current.shortcuts || []), ...shortcuts],

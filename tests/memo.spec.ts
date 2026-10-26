@@ -56,8 +56,14 @@ async function menu(page: Page) {
   await page.getByRole("button", { name: "메모 메뉴", exact: true }).click();
 }
 async function color(page: Page, name: string, value: string) {
+  const palette = name === "글씨색" || name === "강조색";
+  if (palette)
+    await page
+      .getByRole("button", { name: `${name} 선택`, exact: true })
+      .click();
   await page
-    .getByLabel(name, { exact: true })
+    .locator('input[type="color"]')
+    .and(page.getByLabel(name, { exact: true }))
     .evaluate((input: HTMLInputElement, value) => {
       Object.getOwnPropertyDescriptor(
         HTMLInputElement.prototype,
@@ -66,6 +72,8 @@ async function color(page: Page, name: string, value: string) {
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
     }, value);
+  if (palette)
+    await page.getByRole("button", { name: "완료", exact: true }).click();
 }
 async function mockClipboard(page: Page) {
   await page.addInitScript(() =>
@@ -379,6 +387,10 @@ test("backup import preserves existing notes and remaps copy-button references",
   await page.getByRole("button", { name: "백업 저장", exact: true }).click();
   expect((await downloadPromise).suggestedFilename()).toMatch(/^MEMO-백업-/);
   const backup = {
+    colorPalettes: {
+      text: { recent: ["#123456"], favorites: ["#123456"] },
+      highlight: { recent: [], favorites: [] },
+    },
     appearance: { headerColor: "#d6e6f4" },
     version: 1,
     selectedId: "note-1",
@@ -411,6 +423,11 @@ test("backup import preserves existing notes and remaps copy-button references",
     buffer: Buffer.from(JSON.stringify(backup)),
   });
   await page.getByRole("button", { name: "가져오기", exact: true }).click();
+  await page.getByRole("button", { name: "글씨색 선택", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "글씨색 즐겨찾기 #123456", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "완료", exact: true }).click();
   await page.getByRole("button", { name: "▣ 본문 참조", exact: true }).click();
   await expect
     .poll(() => page.evaluate(() => sessionStorage.getItem("copied")))
@@ -704,4 +721,283 @@ test("shortcuts wrap downward and long labels remain readable at 320px", async (
     path: "test-results/memo-wrapped.png",
     fullPage: true,
   });
+});
+
+test("memo list deletes the requested memo with a confirmation without changing another selection", async ({
+  page,
+}) => {
+  await open(page);
+  await page.getByRole("button", { name: "메모 목록", exact: true }).click();
+  await page
+    .getByRole("button", { name: "답변 문구 메모 삭제", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "메모를 삭제할까요?" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "취소", exact: true }).click();
+  await expect(page.locator(".note-choice")).toHaveCount(2);
+  await page
+    .getByRole("button", { name: "답변 문구 메모 삭제", exact: true })
+    .click();
+  await page.getByRole("button", { name: "삭제하기", exact: true }).click();
+  await expect(page.locator(".note-choice")).toHaveCount(1);
+  await page.getByRole("button", { name: "닫기", exact: true }).click();
+  await expect(page.locator(".compact-title")).toHaveValue("업무 메모");
+  await page.reload();
+  await expect(body(page)).toContainText("프로젝트 일정을");
+});
+
+test("memo order can be changed with buttons and drag and survives restart", async ({
+  page,
+}) => {
+  await open(page);
+  await page.getByRole("button", { name: "메모 목록", exact: true }).click();
+  await page
+    .getByRole("button", { name: "답변 문구 메모 위로 이동", exact: true })
+    .click();
+  await expect(page.locator(".note-choice")).toHaveText([
+    "답변 문구",
+    "업무 메모",
+  ]);
+  await page
+    .getByRole("button", { name: "답변 문구 메모 끌어서 이동", exact: true })
+    .dragTo(page.getByRole("button", { name: "업무 메모", exact: true }));
+  await expect(page.locator(".note-choice")).toHaveText([
+    "업무 메모",
+    "답변 문구",
+  ]);
+  await page
+    .getByRole("button", { name: "업무 메모 메모 아래로 이동", exact: true })
+    .click();
+  await page.reload();
+  await page.getByRole("button", { name: "메모 목록", exact: true }).click();
+  await expect(page.locator(".note-choice")).toHaveText([
+    "답변 문구",
+    "업무 메모",
+  ]);
+});
+
+test("sections can be dragged and moved with buttons without losing their contents", async ({
+  page,
+}) => {
+  await open(page);
+  await page
+    .getByRole("button", { name: "업무 섹션 끌어서 이동", exact: true })
+    .dragTo(page.getByRole("textbox", { name: "섹션 2 제목", exact: true }));
+  await expect
+    .poll(() =>
+      page
+        .locator(".section-title")
+        .evaluateAll((nodes) =>
+          nodes.map((n) => (n as HTMLInputElement).value),
+        ),
+    )
+    .toEqual(["기록", "업무"]);
+  await expect(body(page)).toContainText("프로젝트 일정을");
+  await page
+    .getByRole("button", { name: "업무 섹션 위로 이동", exact: true })
+    .click();
+  await expect
+    .poll(() =>
+      page
+        .locator(".section-title")
+        .evaluateAll((nodes) =>
+          nodes.map((n) => (n as HTMLInputElement).value),
+        ),
+    )
+    .toEqual(["업무", "기록"]);
+  await page
+    .getByRole("button", { name: "업무 섹션 아래로 이동", exact: true })
+    .click();
+  await page.reload();
+  await expect
+    .poll(() =>
+      page
+        .locator(".section-title")
+        .evaluateAll((nodes) =>
+          nodes.map((n) => (n as HTMLInputElement).value),
+        ),
+    )
+    .toEqual(["기록", "업무"]);
+  await expect(body(page, "기록 내용")).toHaveText("자료를 확인합니다.");
+});
+
+test("line spacing and paragraph margins apply to selected paragraphs and persist", async ({
+  page,
+}) => {
+  await open(page);
+  await body(page).click();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page
+    .getByRole("button", { name: "줄 간격과 문단 여백", exact: true })
+    .click();
+  await page
+    .getByRole("combobox", { name: "줄 간격", exact: true })
+    .selectOption("1.2");
+  await page
+    .getByRole("spinbutton", { name: "문단 위 여백", exact: true })
+    .fill("6");
+  await page
+    .getByRole("spinbutton", { name: "문단 아래 여백", exact: true })
+    .fill("14");
+  await page.getByRole("button", { name: "적용", exact: true }).click();
+  await expect(body(page).locator("p").first()).toHaveCSS(
+    "line-height",
+    "19.2px",
+  );
+  await expect(body(page).locator("p").first()).toHaveCSS("margin-top", "6px");
+  await expect(body(page).locator("p").last()).toHaveCSS(
+    "margin-bottom",
+    "14px",
+  );
+  await expect(body(page, "기록 내용").locator("p")).toHaveCSS(
+    "line-height",
+    "28.8px",
+  );
+  await expect(body(page, "기록 내용").locator("p")).toHaveCSS(
+    "margin-bottom",
+    "0px",
+  );
+  await page.reload();
+  await expect(body(page).locator("p").first()).toHaveCSS(
+    "line-height",
+    "19.2px",
+  );
+  await expect(body(page).locator("p").first()).toHaveCSS("margin-top", "6px");
+});
+
+test("text and highlight colors have separate recent lists and favorite colors", async ({
+  page,
+}) => {
+  await open(page);
+  await body(page).click();
+  await page.keyboard.press("ControlOrMeta+a");
+  await color(page, "글씨색", "#123456");
+  await page.getByRole("button", { name: "글씨색 선택", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "글씨색 최근 #123456", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "현재 글씨색 즐겨찾기", exact: true })
+    .click();
+  await page.getByRole("button", { name: "완료", exact: true }).click();
+  await color(page, "강조색", "#ffeebb");
+  await page.getByRole("button", { name: "강조색 선택", exact: true }).click();
+  await page
+    .getByRole("button", { name: "현재 강조색 즐겨찾기", exact: true })
+    .click();
+  await page.getByRole("button", { name: "완료", exact: true }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "글씨색 선택", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "글씨색 즐겨찾기 #123456", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "글씨색 즐겨찾기 #ffeebb", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "완료", exact: true }).click();
+  await page.getByRole("button", { name: "강조색 선택", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "강조색 즐겨찾기 #ffeebb", exact: true }),
+  ).toBeVisible();
+});
+
+test("tables support insertion, editing, row and column actions, persistence and confirmed deletion", async ({
+  page,
+}) => {
+  await open(page);
+  await body(page).click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.getByRole("button", { name: "표 삽입", exact: true }).click();
+  await page
+    .getByRole("spinbutton", { name: "표 행 수", exact: true })
+    .fill("3");
+  await page
+    .getByRole("spinbutton", { name: "표 열 수", exact: true })
+    .fill("2");
+  await page.getByRole("button", { name: "표 넣기", exact: true }).click();
+  const table = body(page).locator("table");
+  await expect(table.locator("tr")).toHaveCount(3);
+  await expect(table.locator("tr").first().locator("th")).toHaveCount(2);
+  await table.locator("th").first().click();
+  await page.keyboard.type("항목");
+  await table.locator("td").first().click();
+  await page.keyboard.type("내용");
+  await page.getByRole("button", { name: "행 추가", exact: true }).click();
+  await page.getByRole("button", { name: "열 추가", exact: true }).click();
+  await expect(table.locator("tr")).toHaveCount(4);
+  await expect(table.locator("tr").first().locator("th")).toHaveCount(3);
+  await page.reload();
+  await expect(table.locator("tr")).toHaveCount(4);
+  await expect(table).toContainText("항목");
+  await expect(table).toContainText("내용");
+  await table.locator("td").first().click();
+  await page.getByRole("button", { name: "열 삭제", exact: true }).click();
+  await page.getByRole("button", { name: "취소", exact: true }).click();
+  await expect(table.locator("tr").first().locator("th")).toHaveCount(3);
+  await page.getByRole("button", { name: "열 삭제", exact: true }).click();
+  await page.getByRole("button", { name: "삭제하기", exact: true }).click();
+  await expect(table.locator("tr").first().locator("th")).toHaveCount(2);
+  await page.getByRole("button", { name: "표 삭제", exact: true }).click();
+  await page.getByRole("button", { name: "삭제하기", exact: true }).click();
+  await expect(table).toHaveCount(0);
+  await expect(body(page)).toContainText("프로젝트 일정을");
+});
+
+test("top and inline folder and copy button colors can be edited and restored", async ({
+  page,
+}) => {
+  await open(page);
+  await folder(page);
+  await page
+    .getByRole("button", { name: "바로가기 관리", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "지재권폴더 수정", exact: true })
+    .click();
+  await color(page, "버튼 배경색", "#111111");
+  await page.getByRole("button", { name: "저장", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "지재권폴더", exact: true }),
+  ).toHaveCSS("background-color", "rgb(17, 17, 17)");
+  await expect(
+    page.getByRole("button", { name: "지재권폴더", exact: true }),
+  ).toHaveCSS("color", "rgb(255, 255, 255)");
+  await body(page).click();
+  await folder(page, "본문 색상", "body");
+  await page
+    .getByRole("button", { name: "▱ 본문 색상", exact: true })
+    .click({ button: "right" });
+  await expect(
+    page.getByRole("dialog", { name: "폴더 버튼 수정" }),
+  ).toBeVisible();
+  await color(page, "버튼 배경색", "#ffddee");
+  await page.getByRole("button", { name: "저장", exact: true }).click();
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "▱ 본문 색상", exact: true }),
+  ).toHaveCSS("background-color", "rgb(255, 221, 238)");
+  await expect(
+    page.getByRole("button", { name: "지재권폴더", exact: true }),
+  ).toHaveCSS("background-color", "rgb(17, 17, 17)");
+});
+
+test("application controls use the default Gothic font and keep compact layout", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 760 });
+  await open(page);
+  expect(
+    await page
+      .locator(".compact-title")
+      .evaluate((el) => getComputedStyle(el).fontFamily),
+  ).toContain("Malgun Gothic");
+  expect(
+    await page
+      .getByRole("button", { name: "폴더 추가", exact: true })
+      .evaluate((el) => getComputedStyle(el).fontFamily),
+  ).not.toContain("NeoDunggeunmo");
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(320);
 });

@@ -91,6 +91,7 @@ function createWindow() {
     resizable: preferences.sizeLocked !== true,
     maximizable: preferences.sizeLocked !== true,
     title: "MEMO",
+    icon: path.join(__dirname, "../dist/icon.png"),
     backgroundColor: "#ffffff",
     autoHideMenuBar: true,
     webPreferences: {
@@ -163,6 +164,8 @@ else {
   });
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null);
+    if (process.platform === "win32")
+      app.setAppUserModelId("com.memostudio.app");
     try {
       const saved = JSON.parse(fs.readFileSync(preferenceFile(), "utf8"));
       if (saved && typeof saved === "object" && !Array.isArray(saved))

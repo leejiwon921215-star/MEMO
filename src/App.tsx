@@ -5,6 +5,9 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUpFromLine,
+  ArrowUp,
+  ArrowDown,
+  GripVertical,
   Check,
   CheckCheck,
   ChevronDown,
@@ -29,6 +32,7 @@ import {
 import { Modal } from "./components/Modal";
 import { SectionEditor } from "./components/SectionEditor";
 import { Toolbar } from "./components/Toolbar";
+import { emptyPalettes, shortcutStyle, type ColorKind } from "./lib/colors";
 import { DEFAULT_HEADER_COLOR, HEADER_COLORS, headerTheme } from "./lib/theme";
 import {
   id,
@@ -53,7 +57,11 @@ type DeleteTarget =
   | { type: "note"; noteId: string; title: string }
   | { type: "section"; noteId: string; sectionId: string; title: string }
   | { type: "shortcut"; shortcutId: string; title: string };
-type ActionDialog = { kind: "folder" | "copy"; editingId?: string };
+type ActionDialog = {
+  kind: "folder" | "copy";
+  editingId?: string;
+  inline?: { editor: Editor; position: number };
+};
 export default function App() {
   const [data, setData] = useState<MemoData | null>(null);
   const [blocked, setBlocked] = useState(false);
@@ -77,6 +85,8 @@ export default function App() {
   const [copyNoteId, setCopyNoteId] = useState("");
   const [copyText, setCopyText] = useState("");
   const [actionError, setActionError] = useState("");
+  const [buttonColor, setButtonColor] = useState("#e2eecf");
+  const [customButtonColor, setCustomButtonColor] = useState(false);
   const [notice, setNotice] = useState("");
   const [settings, setSettings] = useState<WindowSettings>({
     alwaysOnTop: false,
@@ -95,8 +105,75 @@ export default function App() {
   const native = !!window.memoDesktop;
   const note = data?.notes.find((n) => n.id === data.selectedId) || null;
   const shortcuts = data?.shortcuts || [];
+  const palettes = data?.colorPalettes || emptyPalettes();
   const headerColor = data?.appearance?.headerColor || DEFAULT_HEADER_COLOR;
 
+  function rememberColor(kind: ColorKind, color: string) {
+    setData((current) => {
+      if (!current) return current;
+      const all = current.colorPalettes || emptyPalettes();
+      return {
+        ...current,
+        colorPalettes: {
+          ...all,
+          [kind]: {
+            ...all[kind],
+            recent: [
+              color,
+              ...all[kind].recent.filter((c) => c !== color),
+            ].slice(0, 12),
+          },
+        },
+      };
+    });
+  }
+  function favoriteColor(kind: ColorKind, color: string) {
+    const favorites = palettes[kind].favorites;
+    if (!favorites.includes(color) && favorites.length >= 32) {
+      setNotice("색상 즐겨찾기는 종류별로 32개까지 저장할 수 있습니다.");
+      return;
+    }
+    setData((current) => {
+      if (!current) return current;
+      const all = current.colorPalettes || emptyPalettes();
+      const list = all[kind].favorites;
+      return {
+        ...current,
+        colorPalettes: {
+          ...all,
+          [kind]: {
+            ...all[kind],
+            favorites: list.includes(color)
+              ? list.filter((c) => c !== color)
+              : [...list, color],
+          },
+        },
+      };
+    });
+  }
+  function reorderNotes(source: string, target: string) {
+    setData((current) => {
+      if (!current) return current;
+      const notes = [...current.notes];
+      const from = notes.findIndex((n) => n.id === source),
+        to = notes.findIndex((n) => n.id === target);
+      if (from < 0 || to < 0 || from === to) return current;
+      const [moved] = notes.splice(from, 1);
+      notes.splice(to, 0, moved);
+      return { ...current, notes };
+    });
+  }
+  function reorderSections(noteId: string, source: string, target: string) {
+    updateNote(noteId, (n) => {
+      const sections = [...n.sections];
+      const from = sections.findIndex((s) => s.id === source),
+        to = sections.findIndex((s) => s.id === target);
+      if (from < 0 || to < 0 || from === to) return {};
+      const [moved] = sections.splice(from, 1);
+      sections.splice(to, 0, moved);
+      return { sections };
+    });
+  }
   function setHeaderColor(color: string) {
     setData(
       (current) =>
@@ -326,9 +403,17 @@ export default function App() {
       );
     }
   }
-  function openAction(kind: "folder" | "copy", shortcut?: Shortcut) {
+  function openAction(
+    kind: "folder" | "copy",
+    shortcut?: Action & { id?: string },
+    inline?: { editor: Editor; position: number },
+  ) {
     setPanel(null);
-    setActionDialog({ kind, editingId: shortcut?.id });
+    setActionDialog({ kind, editingId: shortcut?.id, inline });
+    setButtonColor(
+      shortcut?.background || (kind === "folder" ? "#e2eecf" : "#e8edf6"),
+    );
+    setCustomButtonColor(!!shortcut?.background);
     setLabel(shortcut?.label || "");
     setPath(shortcut?.type === "folder" ? shortcut.path : "");
     setPlacement("top");
@@ -407,7 +492,30 @@ export default function App() {
         text: copyText,
       };
     }
-    if (placement === "body" && !actionDialog.editingId) {
+    action = {
+      ...action,
+      ...(customButtonColor ? { background: buttonColor } : {}),
+    };
+    if (actionDialog.inline) {
+      const { editor: target, position } = actionDialog.inline;
+      const node = target.isDestroyed
+        ? null
+        : target.state.doc.nodeAt(position);
+      const type = action.type === "folder" ? "folderButton" : "copyButton";
+      if (!node || node.type.name !== type) {
+        setActionError("수정할 버튼을 찾을 수 없습니다. 다시 선택해 주세요.");
+        return;
+      }
+      target
+        .chain()
+        .focus()
+        .setNodeSelection(position)
+        .updateAttributes(type, {
+          ...action,
+          background: action.background || null,
+        })
+        .run();
+    } else if (placement === "body" && !actionDialog.editingId) {
       if (!editor || editor.isDestroyed) {
         setActionError("버튼을 넣을 본문을 먼저 클릭해 주세요.");
         return;
@@ -416,12 +524,17 @@ export default function App() {
         action.type === "folder"
           ? {
               type: "folderButton",
-              attrs: { label: action.label, path: action.path },
+              attrs: {
+                label: action.label,
+                path: action.path,
+                background: action.background || null,
+              },
             }
           : {
               type: "copyButton",
               attrs: {
                 label: action.label,
+                background: action.background || null,
                 mode: action.mode,
                 ...(action.mode === "text"
                   ? { text: action.text }
@@ -449,7 +562,9 @@ export default function App() {
     }
     setActionDialog(null);
     setNotice(
-      actionDialog.editingId ? "버튼을 수정했습니다." : "버튼을 추가했습니다.",
+      actionDialog.editingId || actionDialog.inline
+        ? "버튼을 수정했습니다."
+        : "버튼을 추가했습니다.",
     );
   }
   function moveShortcut(shortcutId: string, offset: number) {
@@ -656,6 +771,7 @@ export default function App() {
                 <button
                   key={shortcut.id}
                   className={`shortcut-button ${shortcut.type}`}
+                  style={shortcutStyle(shortcut.background)}
                   title={
                     shortcut.type === "folder"
                       ? shortcut.path
@@ -687,6 +803,9 @@ export default function App() {
             editor={editor && !editor.isDestroyed ? editor : null}
             background={note.background}
             onBackground={(background) => updateNote(note.id, { background })}
+            palettes={palettes}
+            onRememberColor={rememberColor}
+            onFavoriteColor={favoriteColor}
           />
         )}
       </header>
@@ -706,6 +825,15 @@ export default function App() {
               <SectionEditor
                 key={section.id}
                 section={section}
+                noteId={note.id}
+                total={note.sections.length}
+                onReorder={(source) =>
+                  reorderSections(note.id, source, section.id)
+                }
+                onMove={(offset) => {
+                  const target = note.sections[index + offset];
+                  if (target) reorderSections(note.id, section.id, target.id);
+                }}
                 index={index}
                 active={activeSection === section.id}
                 onChange={(patch) => updateSection(note.id, section.id, patch)}
@@ -729,6 +857,9 @@ export default function App() {
                   })
                 }
                 onCopy={(action) => void runAction(action)}
+                onEditInline={(action, editor, position) =>
+                  openAction(action.type, action, { editor, position })
+                }
               />
             ))}
             <button className="add-section" onClick={addSection}>
@@ -800,16 +931,87 @@ export default function App() {
             </button>
           </div>
           <div className="notes-list">
-            {filteredNotes.map((n) => (
-              <button
+            {filteredNotes.map((n, index) => (
+              <div
                 key={n.id}
-                className={`note-choice ${note?.id === n.id ? "selected" : ""}`}
-                onClick={() => selectNote(n.id)}
+                className="note-row"
+                onDragOver={(event) => {
+                  if (
+                    event.dataTransfer.types.includes("application/x-memo-note")
+                  ) {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }
+                }}
+                onDrop={(event) => {
+                  if (
+                    !event.dataTransfer.types.includes(
+                      "application/x-memo-note",
+                    )
+                  )
+                    return;
+                  event.preventDefault();
+                  const source = event.dataTransfer.getData(
+                    "application/x-memo-note",
+                  );
+                  if (source) reorderNotes(source, n.id);
+                }}
               >
-                <span>{n.title || "제목 없음"}</span>
-                {n.favorite && <Star size={12} fill="currentColor" />}
-                {note?.id === n.id && <Check size={14} />}
-              </button>
+                <button
+                  className="icon-button drag-handle"
+                  draggable
+                  aria-label={`${n.title || "제목 없음"} 메모 끌어서 이동`}
+                  title="끌어서 순서 변경"
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData("application/x-memo-note", n.id);
+                    event.dataTransfer.effectAllowed = "move";
+                  }}
+                >
+                  <GripVertical size={14} />
+                </button>
+                <button
+                  className={`note-choice ${note?.id === n.id ? "selected" : ""}`}
+                  onClick={() => selectNote(n.id)}
+                >
+                  <span>{n.title || "제목 없음"}</span>
+                  {n.favorite && <Star size={12} fill="currentColor" />}
+                  {note?.id === n.id && <Check size={14} />}
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label={`${n.title || "제목 없음"} 메모 위로 이동`}
+                  disabled={index === 0}
+                  onClick={() =>
+                    reorderNotes(n.id, filteredNotes[index - 1].id)
+                  }
+                >
+                  <ArrowUp size={13} />
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label={`${n.title || "제목 없음"} 메모 아래로 이동`}
+                  disabled={index === filteredNotes.length - 1}
+                  onClick={() =>
+                    reorderNotes(n.id, filteredNotes[index + 1].id)
+                  }
+                >
+                  <ArrowDown size={13} />
+                </button>
+                <button
+                  className="icon-button danger-text"
+                  aria-label={`${n.title || "제목 없음"} 메모 삭제`}
+                  title="메모 삭제"
+                  onClick={() =>
+                    setDeleteTarget({
+                      type: "note",
+                      noteId: n.id,
+                      title: n.title,
+                    })
+                  }
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             ))}
             {!filteredNotes.length && (
               <p className="field-hint">메모가 없습니다.</p>
@@ -1081,7 +1283,7 @@ export default function App() {
       )}
       {actionDialog && (
         <Modal
-          title={`${actionDialog.kind === "folder" ? "폴더" : "복사"} 버튼 ${actionDialog.editingId ? "수정" : "추가"}`}
+          title={`${actionDialog.kind === "folder" ? "폴더" : "복사"} 버튼 ${actionDialog.editingId || actionDialog.inline ? "수정" : "추가"}`}
           onClose={() => setActionDialog(null)}
         >
           <form
@@ -1202,7 +1404,37 @@ export default function App() {
                 )}
               </>
             )}
-            {!actionDialog.editingId && (
+            <label className="field-label">버튼 배경색</label>
+            <div className="button-color-field">
+              <input
+                type="color"
+                aria-label="버튼 배경색"
+                value={buttonColor}
+                onChange={(event) => {
+                  setButtonColor(event.target.value);
+                  setCustomButtonColor(true);
+                }}
+              />
+              <span
+                className={`shortcut-button ${actionDialog.kind}`}
+                style={customButtonColor ? shortcutStyle(buttonColor) : {}}
+              >
+                {label || "버튼 미리보기"}
+              </span>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setButtonColor(
+                    actionDialog.kind === "folder" ? "#e2eecf" : "#e8edf6",
+                  );
+                  setCustomButtonColor(false);
+                }}
+              >
+                버튼 기본색
+              </button>
+            </div>
+            {!actionDialog.editingId && !actionDialog.inline && (
               <fieldset>
                 <legend>추가 위치</legend>
                 <label>
@@ -1242,7 +1474,9 @@ export default function App() {
                 취소
               </button>
               <button type="submit" className="primary-button">
-                {actionDialog.editingId ? "저장" : "버튼 추가"}
+                {actionDialog.editingId || actionDialog.inline
+                  ? "저장"
+                  : "버튼 추가"}
               </button>
             </div>
           </form>

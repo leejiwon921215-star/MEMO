@@ -141,6 +141,16 @@ test(
         .getByRole("textbox", { name: "복사할 문구", exact: true })
         .fill("감사합니다.\n좋은 하루 보내세요.");
       await page
+        .locator('input[aria-label="버튼 배경색"]')
+        .evaluate((input) => {
+          Object.getOwnPropertyDescriptor(
+            HTMLInputElement.prototype,
+            "value",
+          ).set.call(input, "#ffddee");
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+      await page
         .getByRole("button", { name: "버튼 추가", exact: true })
         .click();
       await page
@@ -166,6 +176,25 @@ test(
         JSON.parse(await fs.readFile(path.join(userData, "memos.json"), "utf8"))
           .appearance.headerColor,
         "#e8d9ec",
+      );
+      await page.locator(".tiptap").first().fill("팔레트 저장 검사");
+      await page.locator(".tiptap").first().click();
+      await page.keyboard.press("ControlOrMeta+a");
+      await page
+        .getByRole("button", { name: "글씨색 선택", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "글씨색 기본 #d93025", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "현재 글씨색 즐겨찾기", exact: true })
+        .click();
+      await page.getByRole("button", { name: "완료", exact: true }).click();
+      await page.getByRole("status").filter({ hasText: "저장됨" }).waitFor();
+      assert.deepEqual(
+        JSON.parse(await fs.readFile(path.join(userData, "memos.json"), "utf8"))
+          .colorPalettes.text.favorites,
+        ["#d93025"],
       );
       await app.evaluate(({ shell, dialog }, selected) => {
         globalThis.__openedFolder = null;
@@ -230,6 +259,21 @@ test(
           .locator(".note-bar")
           .evaluate((el) => getComputedStyle(el).backgroundColor),
         "rgb(232, 217, 236)",
+      );
+      await restoredPage
+        .getByRole("button", { name: "글씨색 선택", exact: true })
+        .click();
+      await restoredPage
+        .getByRole("button", { name: "글씨색 즐겨찾기 #d93025", exact: true })
+        .waitFor();
+      await restoredPage
+        .getByRole("button", { name: "완료", exact: true })
+        .click();
+      assert.equal(
+        await restoredPage
+          .getByRole("button", { name: "인사 복사", exact: true })
+          .evaluate((el) => getComputedStyle(el).backgroundColor),
+        "rgb(255, 221, 238)",
       );
       const restoredSettings = await restoredPage.evaluate(() =>
         window.memoDesktop.getWindowSettings(),

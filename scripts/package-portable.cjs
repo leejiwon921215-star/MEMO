@@ -5,6 +5,7 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { getPath7za } = require("app-builder-lib/out/toolsets/7zip");
+const { withMemoIcon } = require("./patch-icons.cjs");
 const { version } = require("../package.json");
 const root = path.resolve(__dirname, "..");
 async function run(command, args, cwd) {
@@ -47,6 +48,8 @@ async function main() {
   const sdkDir = path.join(cache, "sdk-25.01");
   await run(sevenZip, ["x", sdkArchive, `-o${sdkDir}`, "-y", "-bso0"]);
   const dir = path.join(root, "release");
+  const appExe = path.join(dir, "win-unpacked/MEMO.exe");
+  fs.writeFileSync(appExe, await withMemoIcon(fs.readFileSync(appExe)));
   const archive = path.join(dir, `MEMO-Windows-${version}.7z`);
   const exe = path.join(dir, `MEMO-Windows-${version}.exe`);
   fs.rmSync(archive, { force: true });
@@ -65,7 +68,9 @@ async function main() {
     ],
     path.join(dir, "win-unpacked"),
   );
-  const module = fs.readFileSync(path.join(sdkDir, "bin/7zSD.sfx"));
+  const module = await withMemoIcon(
+    fs.readFileSync(path.join(sdkDir, "bin/7zSD.sfx")),
+  );
   const config = Buffer.from(
     ';!@Install@!UTF-8!\nTitle="MEMO"\nRunProgram="MEMO.exe"\nProgress="yes"\n;!@InstallEnd@!\n',
   );
